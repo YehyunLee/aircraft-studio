@@ -9,6 +9,7 @@ export default function Simulation() {
   const [selectedModel, setSelectedModel] = useState('');
   const [availableModels, setAvailableModels] = useState([]);
   const [error, setError] = useState('');
+  const [isLoadingModel, setIsLoadingModel] = useState(false);
 
   // AR session refs
   const rendererRef = useRef();
@@ -66,19 +67,28 @@ export default function Simulation() {
     }
 
     try {
-      // Create renderer
-      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      // Create renderer with proper AR settings
+      const renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        alpha: true,
+        preserveDrawingBuffer: true
+      });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
+      
+      // Essential for AR - enable auto clear and set clear alpha
+      renderer.autoClear = false;
+      renderer.setClearColor(0x000000, 0);
       
       // Set reference space type on renderer BEFORE session
       renderer.xr.setReferenceSpaceType('local');
       
       rendererRef.current = renderer;
 
-      // Create scene
+      // Create scene with transparent background for AR
       const scene = new THREE.Scene();
+      // Don't set scene background - let camera passthrough show
       sceneRef.current = scene;
 
       // Create camera
@@ -96,6 +106,7 @@ export default function Simulation() {
       // Request AR session
       const sessionInit = {
         requiredFeatures: ['dom-overlay'],
+        optionalFeatures: ['local-floor'],
         domOverlay: { root: document.body }
       };
       
@@ -108,25 +119,30 @@ export default function Simulation() {
       session.addEventListener('end', () => {
         setIsARActive(false);
         sessionRef.current = null;
+        aircraftRef.current = null;
+        setIsLoadingModel(false);
       });
 
       // Request reference space AFTER session
       session.requestReferenceSpace('local').then((refSpace) => {
-        // Simple approach: place aircraft at fixed position
-        if (selectedModel) {
-          placeAircraft();
-        }
-
-        // Append to container
+        // Append to container BEFORE starting render loop
         containerRef.current.appendChild(renderer.domElement);
 
-        // Start render loop
+        // Start render loop with proper AR rendering
         renderer.setAnimationLoop(() => {
+          // Clear the screen
+          renderer.clear();
+          // Render the scene (aircraft will appear over camera feed)
           renderer.render(scene, camera);
         });
         
         setIsARActive(true);
         setError('');
+        
+        // Load aircraft AFTER AR is active
+        if (selectedModel) {
+          placeAircraft();
+        }
       }).catch((err) => {
         console.error('Failed to get reference space:', err);
         setError('Failed to initialize AR reference space: ' + err.message);
@@ -139,28 +155,42 @@ export default function Simulation() {
   };
 
   const placeAircraft = async () => {
-    if (!selectedModel || aircraftRef.current) return;
+    if (!selectedModel || aircraftRef.current || !sceneRef.current) return;
+
+    setIsLoadingModel(true);
 
     try {
       const loader = new GLTFLoader();
       
-      loader.load(selectedModel, (gltf) => {
-        const aircraft = gltf.scene;
-        
-        // Scale and position the aircraft at a fixed position
-        aircraft.scale.setScalar(0.1); // Adjust scale as needed
-        aircraft.position.set(0, 0, -1); // Place 1 meter in front of user
-        
-        sceneRef.current.add(aircraft);
-        aircraftRef.current = aircraft;
-        
-      }, undefined, (error) => {
-        console.error('Error loading aircraft model:', error);
-        setError('Failed to load aircraft model');
-      });
+      loader.load(
+        selectedModel, 
+        (gltf) => {
+          const aircraft = gltf.scene;
+          
+          // Position aircraft in front of user at eye level
+          aircraft.scale.setScalar(0.3); // Reasonable scale for AR viewing
+          aircraft.position.set(0, 0, -2); // 2 meters in front of user
+          aircraft.rotation.set(0, Math.PI, 0); // Face towards user
+          
+          sceneRef.current.add(aircraft);
+          aircraftRef.current = aircraft;
+          setIsLoadingModel(false);
+          
+          console.log('Aircraft loaded and placed in AR scene');
+        }, 
+        (progress) => {
+          console.log('Loading progress:', (progress.loaded / progress.total * 100) + '%');
+        },
+        (error) => {
+          console.error('Error loading aircraft model:', error);
+          setError('Failed to load aircraft model: ' + error.message);
+          setIsLoadingModel(false);
+        }
+      );
     } catch (err) {
       console.error('Error placing aircraft:', err);
-      setError('Failed to place aircraft');
+      setError('Failed to place aircraft: ' + err.message);
+      setIsLoadingModel(false);
     }
   };
 
@@ -168,13 +198,14 @@ export default function Simulation() {
     if (sessionRef.current) {
       sessionRef.current.end();
     }
-    if (rendererRef.current && containerRef.current) {
+    if (rendererRef.current && containerRef.current && rendererRef.current.domElement.parentNode) {
       containerRef.current.removeChild(rendererRef.current.domElement);
       rendererRef.current.dispose();
     }
     // Reset refs
     aircraftRef.current = null;
     setIsARActive(false);
+    setIsLoadingModel(false);
   };
 
   return (
@@ -218,7 +249,7 @@ export default function Simulation() {
                     </button>
                     
                     <p className="text-xs text-white/60">
-                      Aircraft will appear 1 meter in front of you in AR
+                      Aircraft will appear close to you in AR space
                     </p>
                   </>
                 ) : (
@@ -254,9 +285,16 @@ export default function Simulation() {
             Exit AR
           </button>
           
-          {!aircraftRef.current && (
-            <div className="px-4 py-2 bg-black/60 backdrop-blur rounded-xl text-white text-sm">
-              Aircraft loading...
+          {isLoadingModel && (
+            <div className="px-4 py-2 bg-black/60 backdrop-blur rounded-xl text-white text-sm flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              Loading aircraft...
+            </div>
+          )}
+          
+          {!isLoadingModel && aircraftRef.current && (
+            <div className="px-4 py-2 bg-green-500/60 backdrop-blur rounded-xl text-white text-sm">
+              Aircraft loaded
             </div>
           )}
         </div>
