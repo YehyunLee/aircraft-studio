@@ -385,10 +385,10 @@ export default function Home() {
                          Quick Preview
                        </button>
                        <Link
-                         href={`/ar-preview?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
+                        href={`/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
                          className="px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
                        >
-                         🎮 AR Preview
+                         🎮 Simulation
                        </Link>
                     </div>
                   </div>
@@ -451,7 +451,7 @@ export default function Home() {
                                  👁
                                </button>
                                <Link
-                                 href={`/ar-preview?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`}
+                                href={`/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`}
                                  onClick={(e) => e.stopPropagation()}
                                  className="text-xs text-cyan-300 hover:text-cyan-200"
                                  title="AR Preview"
