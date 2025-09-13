@@ -146,8 +146,25 @@
       const resetBtn = document.getElementById('reset');
 
       closeBtn.addEventListener('click', () => {
-        postOrientation(false);
-        window.parent.postMessage({ type: 'model-preview-close' }, '*');
+        try { postOrientation(false); } catch (e) { /* ignore */ }
+        // If this page is embedded in an iframe, post a message to the parent so the parent UI can close the modal.
+        if (window.parent && window.parent !== window) {
+          try {
+            window.parent.postMessage({ type: 'model-preview-close' }, '*');
+            return;
+          } catch (e) {
+            // continue to fallback behavior
+          }
+        }
+
+        // Fallback: if opened directly (not embedded) try history.back(), then window.close().
+        try {
+          if (window.history && window.history.length > 1) {
+            window.history.back();
+            return;
+          }
+        } catch (e) {}
+        try { window.close(); } catch (e) {}
       });
 
       scaleEl.addEventListener('input', () => {
