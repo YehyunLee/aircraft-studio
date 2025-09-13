@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
+import { getModelObjectURL } from "../lib/idbModels";
 
 // Hangar now shows a flat list of previously generated aircraft (generationHistory)
 export default function Hangar() {
   const [history, setHistory] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -69,6 +72,41 @@ export default function Hangar() {
     }
   }
 
+  async function getPreviewHref(item) {
+    // Prefer explicit URL
+    if (item.modelUrl) return `/preview?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
+    if (item.modelId) {
+      try {
+        const url = await getModelObjectURL(item.modelId);
+        if (url) return `/preview?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
+      } catch {}
+    }
+    return "#";
+  }
+
+  async function getSimulationHref(item) {
+    if (item.modelUrl) return `/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
+    if (item.modelId) {
+      try {
+        const url = await getModelObjectURL(item.modelId);
+        if (url) return `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
+      } catch {}
+    }
+    return "/simulation";
+  }
+
+  async function onPreviewClick(e, item) {
+    e.stopPropagation();
+    const href = await getPreviewHref(item);
+    if (href && href !== '#') router.push(href);
+  }
+
+  async function onSimulationClick(e, item) {
+    e.stopPropagation();
+    const href = await getSimulationHref(item);
+    if (href) router.push(href);
+  }
+
   return (
     <div className="min-h-dvh p-6 bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white">
       <header className="max-w-xl mx-auto flex items-center justify-between mb-6">
@@ -105,7 +143,7 @@ export default function Hangar() {
                        <p className="text-sm text-white/60">#{index + 1}</p>
                        <div className="flex gap-2">
                          <span className="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded-full font-medium">Image</span>
-                         {item.modelUrl && (
+                         {(item.modelUrl || item.modelId) && (
                            <span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-1 rounded-full font-medium">3D</span>
                          )}
                        </div>
@@ -118,13 +156,13 @@ export default function Hangar() {
                    <div className="flex flex-col items-end gap-2">
                      <div className="flex gap-2">
                        <button onClick={(e) => { e.stopPropagation(); downloadImage(item.imageUrl); }} className="px-3 py-2 rounded-xl bg-white/6 text-sm">Download</button>
-                       {item.modelUrl ? (
-                         <Link href={`/preview?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`} className="px-3 py-2 rounded-xl bg-cyan-400 text-black font-semibold">Preview</Link>
+                       {(item.modelUrl || item.modelId) ? (
+                         <button onClick={(e) => onPreviewClick(e, item)} className="px-3 py-2 rounded-xl bg-cyan-400 text-black font-semibold">Preview</button>
                        ) : (
                          <span className="px-3 py-2 rounded-xl bg-white/6 text-sm">No 3D</span>
                        )}
                       </div>
-                      <Link href={`/simulation?src=${encodeURIComponent(item.modelUrl || "")}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`} className="text-xs text-white/60">Open in Simulation</Link>
+                      <button onClick={(e) => onSimulationClick(e, item)} className="text-xs text-white/60 underline-offset-2 hover:underline">Open in Simulation</button>
 
                     <div className="mt-2">
                       <button

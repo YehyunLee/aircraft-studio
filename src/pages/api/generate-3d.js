@@ -1,6 +1,7 @@
 import axios from "axios";
 import FormData from "form-data";
 import path from "path";
+import { getStore } from "@netlify/blobs";
 
 export const config = {
   api: {
@@ -95,10 +96,29 @@ export default async function handler(req, res) {
       const base64 = glbBuffer.toString('base64');
       const dataUrl = `data:model/gltf-binary;base64,${base64}`;
 
+      const glbFilename = filename || `aircraft-${Date.now()}.glb`;
+
+      // Try persisting to Netlify Blobs for a stable URL
+      let stored = false;
+      let publicModelUrl = null;
+      try {
+        const store = getStore('models');
+        await store.set(glbFilename, glbBuffer);
+        stored = true;
+        // Expose via our API route so it works under the same domain and CORS
+        publicModelUrl = `/api/models/${encodeURIComponent(glbFilename)}`;
+      } catch (e) {
+        // If not on Netlify or any issue occurs, fall back to returning data URL only
+        stored = false;
+        publicModelUrl = null;
+      }
+
       res.status(200).json({
         success: true,
+        filename: glbFilename,
+        // If we stored it, give a stable URL; always include data URL for immediate preview
+        modelUrl: publicModelUrl || null,
         modelDataUrl: dataUrl,
-        filename: filename || `aircraft-${Date.now()}.glb`,
         message: "3D model generated successfully",
       });
     } else {

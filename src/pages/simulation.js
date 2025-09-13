@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { getModelObjectURL } from '../lib/idbModels';
 
 export default function Simulation() {
   // HYPERPARAM: toggle enemy spawning (true = spawn enemies automatically)
@@ -43,6 +44,11 @@ export default function Simulation() {
   const isFiringRef = useRef(false); // hold-to-fire flag
   const AIM_SPREAD_DEG = 10.0; // random aim cone half-angle in degrees
 
+  // Audio refs
+  const audioListenerRef = useRef();
+  const propellerSoundRef = useRef();
+  const shootingSoundRef = useRef();
+
   // AR session refs
   const rendererRef = useRef();
   const sceneRef = useRef();
@@ -81,7 +87,25 @@ export default function Simulation() {
     
     // From home page generation history
     const homeHistory = JSON.parse(localStorage.getItem('generationHistory') || '[]');
-    homeHistory.forEach((item, index) => {
+    // Resolve any that have a persistent modelId from IndexedDB; otherwise use modelUrl
+    // We'll collect promises to resolve object URLs
+    const urlCleanup = [];
+    const resolvePromises = homeHistory.map(async (item, index) => {
+      if (item.modelId) {
+        try {
+          const url = await getModelObjectURL(item.modelId);
+          if (url) {
+            urlCleanup.push(url);
+            models.push({
+              id: `home-${index}`,
+              name: item.prompt ? `Generated: ${item.prompt.slice(0, 30)}...` : `Generated Model ${index + 1}`,
+              modelPath: url,
+              source: 'home'
+            });
+            return;
+          }
+        } catch {}
+      }
       if (item.modelUrl) {
         models.push({
           id: `home-${index}`,
@@ -92,11 +116,17 @@ export default function Simulation() {
       }
     });
     
-    setAvailableModels(models);
-    
-    if (models.length > 0) {
-      setSelectedModel(models[0].modelPath);
-    }
+    Promise.allSettled(resolvePromises).then(() => {
+      setAvailableModels(models);
+      if (models.length > 0) {
+        setSelectedModel(models[0].modelPath);
+      }
+    });
+
+    // Cleanup created object URLs on unmount
+    return () => {
+      urlCleanup.forEach((u) => URL.revokeObjectURL(u));
+    };
   }, []);
 
   const initAR = async () => {
@@ -123,6 +153,32 @@ export default function Simulation() {
       // Create camera
       const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
       cameraRef.current = camera;
+
+      // Add audio listener
+      const audioListener = new THREE.AudioListener();
+      camera.add(audioListener);
+      audioListenerRef.current = audioListener;
+
+      // Load propeller sound
+      const propellerSound = new THREE.Audio(audioListener);
+      const audioLoader = new THREE.AudioLoader();
+      audioLoader.load('/jet_engine_9s_sound_effect.mp3', (buffer) => {
+        propellerSound.setBuffer(buffer);
+        propellerSound.setLoop(true);
+        propellerSound.setVolume(0.5);
+        propellerSound.play();
+      });
+      propellerSoundRef.current = propellerSound;
+
+      // Load shooting sound
+      const shootingSound = new THREE.Audio(audioListener);
+      audioLoader.load('/shooting_1s_sound_effect.mp3', (buffer) => {
+        shootingSound.setBuffer(buffer);
+        shootingSound.setLoop(false);
+        shootingSound.setVolume(0.8);
+      });
+      shootingSoundRef.current = shootingSound;
+
 
       // Add lighting
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
@@ -406,6 +462,14 @@ export default function Simulation() {
       if (now - (lastShotTimeRef.current || 0) < SHOT_COOLDOWN) return;
       lastShotTimeRef.current = now;
 
+      // Play shooting sound
+      if (shootingSoundRef.current && shootingSoundRef.current.buffer) {
+        if (shootingSoundRef.current.isPlaying) {
+          shootingSoundRef.current.stop();
+        }
+        shootingSoundRef.current.play();
+      }
+
       // Base orientation vectors
       const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(aircraft.quaternion).normalize();
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(aircraft.quaternion).normalize();
@@ -553,6 +617,11 @@ export default function Simulation() {
           aircraft.scale.setScalar(0.2); // Adjusted scale
           aircraft.position.set(0, -0.5, -2); // 2 meters in front, slightly below eye level
           
+          // Attach positional audio for shooting
+          if (shootingSoundRef.current) {
+            aircraft.add(shootingSoundRef.current);
+          }
+
           sceneRef.current.add(aircraft);
           aircraftRef.current = aircraft;
           setIsLoadingModel(false);
@@ -786,6 +855,13 @@ export default function Simulation() {
       }
       rendererRef.current.dispose();
       rendererRef.current = null;
+    }
+
+    if (propellerSoundRef.current && propellerSoundRef.current.isPlaying) {
+      propellerSoundRef.current.stop();
+    }
+    if (shootingSoundRef.current && shootingSoundRef.current.isPlaying) {
+      shootingSoundRef.current.stop();
     }
 
     sessionRef.current = null;
