@@ -3,6 +3,13 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export default function Simulation() {
+  // HYPERPARAM: toggle enemy spawning (true = spawn enemies automatically)
+  const HYPERPARAM_SPAWN_ENEMIES = true;
+
+  // Refs for enemy instances and GLTF cache
+  const enemiesRef = useRef([]); // array of { object: THREE.Object3D, controller: { update, dispose }, radius }
+  const gltfCache = useRef({});
+
   const containerRef = useRef();
   const [isARSupported, setIsARSupported] = useState(false);
   const [isARActive, setIsARActive] = useState(false);
@@ -241,6 +248,19 @@ export default function Simulation() {
             velocity.current.z = THREE.MathUtils.lerp(velocity.current.z, baseForward, 0.02);
           }
 
+          // Update enemies (simple controllers)
+          try {
+            const enemies = enemiesRef.current || [];
+            for (let i = 0; i < enemies.length; ++i) {
+              const e = enemies[i];
+              if (e && e.controller && typeof e.controller.update === 'function') {
+                e.controller.update(delta, i, enemies);
+              }
+            }
+          } catch (e) {
+            // swallow errors to avoid breaking render loop
+          }
+
           renderer.render(scene, camera);
 
           // Update HUD indicator for aircraft off-screen
@@ -350,6 +370,172 @@ export default function Simulation() {
           setIsLoadingModel(false);
           
           console.log('Aircraft loaded and placed in AR scene');
+
+          // Spawn enemies immediately after placing aircraft if enabled
+          if (HYPERPARAM_SPAWN_ENEMIES) {
+            console.log('HYPERPARAM_SPAWN_ENEMIES is true — preparing to spawn enemies');
+            enemiesRef.current = []; // reset any previous
+            // Determine which models to spawn as enemies.
+            // Rule: spawn as many enemy jets as there are generated jets minus one (player).
+            // availableModels contains all jets; selectedModel is player's. We'll spawn one per other model.
+            (async () => {
+              try {
+                // If there's only one model in availableModels, we duplicate it N times (default 4)
+                // If availableModels is empty due to async state, try reading from localStorage as a fallback
+                let models = availableModels && availableModels.length ? availableModels : [];
+                if (models.length === 0) {
+                  try {
+                    const jets = JSON.parse(localStorage.getItem('jets') || '[]');
+                    const homeHistory = JSON.parse(localStorage.getItem('generationHistory') || '[]');
+                    models = [];
+                    jets.forEach(jet => models.push({ id: jet.id, modelPath: `/models/aircraft-${jet.id}.glb`, source: 'hangar' }));
+                    homeHistory.forEach((item, idx) => { if (item.modelUrl) models.push({ id: `home-${idx}`, modelPath: item.modelUrl, source: 'home' }); });
+                  } catch (e) {
+                    console.warn('Failed to read fallback models from localStorage', e);
+                    models = [];
+                  }
+                }
+                let spawnList = [];
+
+                if (models.length <= 1) {
+                  // Duplicate the selected model 4 times
+                  const count = Math.max(3, Math.min(6, models.length ? 4 : 4));
+                  for (let i = 0; i < count; ++i) spawnList.push({ modelPath: selectedModel });
+                } else {
+                  // Spawn all others except selectedModel
+                  spawnList = models.filter(m => m.modelPath !== selectedModel).map(m => ({ modelPath: m.modelPath }));
+                }
+
+                // Load and spawn each model
+                const loader = new GLTFLoader();
+
+                console.log('Spawning enemy count:', spawnList.length, 'spawnList:', spawnList);
+                for (let i = 0; i < spawnList.length; ++i) {
+                  const entry = spawnList[i];
+                  const url = entry.modelPath || selectedModel;
+
+                  // Load or reuse cached gltf
+                  let gltf = gltfCache.current[url];
+                  let loadedFromCache = false;
+                  if (!gltf) {
+                    try {
+                      gltf = await new Promise((res, rej) => loader.load(url, res, undefined, rej));
+                      gltfCache.current[url] = gltf;
+                      console.log('Enemy GLTF loaded:', url);
+                    } catch (loadErr) {
+                      console.error('Enemy GLTF failed to load:', url, loadErr);
+                      gltf = null;
+                    }
+                  } else {
+                    loadedFromCache = true;
+                    console.log('Reusing cached enemy GLTF:', url);
+                  }
+
+                  // Clone scene so each enemy is independent. If load failed, we'll spawn a placeholder mesh instead.
+                  let enemyObj;
+                  if (gltf && gltf.scene) {
+                    enemyObj = gltf.scene.clone(true);
+                    enemyObj.scale.setScalar(0.18);
+                  } else {
+                    // Placeholder visible sphere so we can debug spawn positions even if glTF fails
+                    const placeholderGeo = new THREE.SphereGeometry(0.18, 12, 8);
+                    const placeholderMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                    enemyObj = new THREE.Mesh(placeholderGeo, placeholderMat);
+                    console.warn('Using placeholder for enemy at URL:', url);
+                  }
+
+                  // Position enemies in a ring around the player start
+                  const angle = (i / Math.max(1, spawnList.length)) * Math.PI * 2 + (Math.random() * 0.5 - 0.25);
+                  const radius = 1.5 + Math.random() * 2.0; // between 1.5m and 3.5m
+                  const yOffset = (Math.random() * 0.6) - 0.3;
+                  enemyObj.position.set(Math.sin(angle) * radius, yOffset, Math.cos(angle) * radius - 2);
+
+                  // Random yaw
+                  enemyObj.quaternion.setFromEuler(new THREE.Euler(0, Math.random() * Math.PI * 2, 0));
+
+                  // Add the enemy object to the scene and a visible marker for debugging
+                  sceneRef.current.add(enemyObj);
+                  // Make a small bright marker to ensure visibility even if model materials are dark
+                  try {
+                    const debugMarker = new THREE.Mesh(
+                      new THREE.SphereGeometry(0.06, 8, 6),
+                      new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+                    );
+                    debugMarker.position.set(0, 0.12, 0);
+                    // If enemyObj is a Group, add marker as child so it moves with the enemy
+                    if (enemyObj.add) enemyObj.add(debugMarker);
+                  } catch (markerErr) {
+                    // ignore marker errors
+                  }
+
+                  // Simple controller attached directly to the object
+                  const controller = (() => {
+                    // Simple wandering controller with avoidance
+                    const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.04, -0.5 - Math.random() * 0.6);
+                    const forward = new THREE.Vector3();
+                    const tmp = new THREE.Vector3();
+                    const radius = 0.6;
+
+                    function update(dt, idx, allEnemies) {
+                      // Basic wander: small random steering
+                      const jitter = 0.6;
+                      velocity.x += (Math.random() - 0.5) * jitter * dt;
+                      velocity.y += (Math.random() - 0.5) * (jitter * 0.4) * dt;
+                      velocity.z += (Math.random() - 0.5) * (jitter * 0.2) * dt;
+
+                      // Limit speeds
+                      velocity.x = THREE.MathUtils.clamp(velocity.x, -1.2, 1.2);
+                      velocity.y = THREE.MathUtils.clamp(velocity.y, -0.8, 0.8);
+                      velocity.z = THREE.MathUtils.clamp(velocity.z, -2.5, -0.2);
+
+                      // Simple collision avoidance: repel from nearby enemies
+                      for (let j = 0; j < allEnemies.length; ++j) {
+                        if (j === idx) continue;
+                        const other = allEnemies[j];
+                        if (!other || !other.object) continue;
+                        tmp.subVectors(enemyObj.position, other.object.position);
+                        const d = tmp.length();
+                        if (d > 0 && d < 1.0) {
+                          tmp.normalize();
+                          // push away proportional to overlap
+                          const push = (1.0 - d) * 2.0;
+                          velocity.addScaledVector(tmp, push * dt * 2.0);
+                        }
+                      }
+
+                      // Integrate
+                      enemyObj.position.addScaledVector(velocity, dt);
+
+                      // Slowly orient to velocity direction
+                      forward.copy(velocity);
+                      forward.y = 0; // ignore pitch for yaw alignment
+                      if (forward.lengthSq() > 1e-6) {
+                        forward.normalize();
+                        const targetQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), forward);
+                        enemyObj.quaternion.slerp(targetQ, 0.06);
+                      }
+
+                      // Keep within a rough boundary around player start to avoid flying away
+                      const maxDist = 12.0;
+                      if (enemyObj.position.length() > maxDist) {
+                        enemyObj.position.multiplyScalar(0.75);
+                      }
+                    }
+
+                    function dispose() {
+                      // no-op for now
+                    }
+
+                    return { update, dispose, radius };
+                  })();
+
+                  enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6 });
+                }
+              } catch (err) {
+                console.warn('Failed to spawn enemy jets:', err);
+              }
+            })();
+          }
         }, 
         (progress) => {
           console.log('Loading progress:', (progress.loaded / progress.total * 100) + '%');
@@ -383,6 +569,17 @@ export default function Simulation() {
 
     sessionRef.current = null;
     aircraftRef.current = null;
+    // Cleanup enemies
+    try {
+      const enemies = enemiesRef.current || [];
+      for (const e of enemies) {
+        if (e.controller && typeof e.controller.dispose === 'function') e.controller.dispose();
+        if (e.object && e.object.parent) e.object.parent.remove(e.object);
+      }
+    } catch (err) {
+      // ignore
+    }
+    enemiesRef.current = [];
     setIsARActive(false);
     setIsLoadingModel(false);
     setError('');
