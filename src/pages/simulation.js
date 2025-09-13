@@ -903,7 +903,7 @@ export default function Simulation() {
     try { enemiesAliveRef.current = Math.max(0, (enemiesAliveRef.current || 0) - 1); } catch (_) {}
   };
 
-  // Finalize session: update leaderboard (localStorage), exit AR, and show modal
+  // Finalize session: update leaderboard (localStorage) and show modal (do NOT exit AR yet)
   const finalizeSessionAndShowLeaderboard = () => {
     const endSec = (performance.now() || Date.now()) / 1000;
     const startSec = sessionStartRef.current || endSec;
@@ -943,9 +943,14 @@ export default function Simulation() {
       setLeaderboardData(arr);
     } catch (_) {}
 
+    // Show leaderboard overlay while still in AR; user will choose to close (and then we'll exit)
+    setShowLeaderboard(true);
+  };
+
+  // Close leaderboard then exit AR session
+  const closeLeaderboardAndExit = () => {
+    try { setShowLeaderboard(false); } catch (_) {}
     try { exitAR(); } catch (_) {}
-    // Delay showing the leaderboard to avoid laggy feel right after AR teardown
-    setTimeout(() => setShowLeaderboard(true), 1000);
   };
 
   const placeAircraft = async () => {
@@ -1406,36 +1411,36 @@ export default function Simulation() {
             </button>
           </div>
         )}
-      </div>
 
-      {showLeaderboard && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60">
-          <div className="glass rounded-2xl p-6 w-full max-w-md text-left">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xl font-semibold">Leaderboard</h2>
-              <button className="px-3 py-1 bg-white/10 rounded-lg" onClick={() => setShowLeaderboard(false)}>Close</button>
-            </div>
-            <p className="text-sm text-white/60 mb-3">Fastest clear time per aircraft.</p>
-            <div className="space-y-2 max-h-[50vh] overflow-auto">
-              {leaderboardData.length === 0 && (
-                <div className="text-white/60 text-sm">No records yet.</div>
-              )}
-              {leaderboardData.map((rec, idx) => (
-                <div key={rec.modelPath + idx} className="flex items-center justify-between bg-white/5 rounded-xl p-3">
-                  <div className="text-sm">
-                    <div className="font-medium">{rec.name || rec.modelPath}</div>
-                    <div className="text-white/60 text-xs">Clears: {rec.totalClears} • Hits: {rec.totalHits} / Shots: {rec.totalShots}</div>
+        {showLeaderboard && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60">
+            <div className="glass rounded-2xl p-6 w-full max-w-md text-left">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xl font-semibold">Leaderboard</h2>
+                <button className="px-3 py-1 bg-white/10 rounded-lg" onClick={closeLeaderboardAndExit}>Close</button>
+              </div>
+              <p className="text-sm text-white/60 mb-3">Fastest clear time per aircraft.</p>
+              <div className="space-y-2 max-h-[50vh] overflow-auto">
+                {leaderboardData.length === 0 && (
+                  <div className="text-white/60 text-sm">No records yet.</div>
+                )}
+                {leaderboardData.map((rec, idx) => (
+                  <div key={rec.modelPath + idx} className="flex items-center justify-between bg-white/5 rounded-xl p-3">
+                    <div className="text-sm">
+                      <div className="font-medium">{rec.name || rec.modelPath}</div>
+                      <div className="text-white/60 text-xs">Clears: {rec.totalClears} • Hits: {rec.totalHits} / Shots: {rec.totalShots}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-cyan-300 font-semibold">{rec.bestTime != null ? rec.bestTime.toFixed(2) + 's' : '-'}</div>
+                      <div className="text-white/60 text-xs">Enemies: {rec.totalEnemiesDestroyed}</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-cyan-300 font-semibold">{rec.bestTime != null ? rec.bestTime.toFixed(2) + 's' : '-'}</div>
-                    <div className="text-white/60 text-xs">Enemies: {rec.totalEnemiesDestroyed}</div>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <style jsx>{`
         .glass {
