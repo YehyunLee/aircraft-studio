@@ -186,7 +186,9 @@ export default function Simulation() {
             const maxYawRate = 2.0; // radians per second (tuned up for responsiveness)
             const yaw = (curInput.right || 0) * -maxYawRate * delta; // negative sign for expected handedness
             const bank = (curInput.right || 0) * -0.45; // target roll angle in radians
-            const pitch = -velocity.current.y * 0.35; // small pitch from vertical velocity
+            // Derive target pitch from forward joystick input: up/down should pivot the jet
+            // Positive forward (up control) => nose up. Tuned multiplier for visible pitch.
+            const pitch = (curInput.forward || 0) * 0.45;
 
             // Apply yaw incrementally
             if (Math.abs(yaw) > 1e-6) {
