@@ -403,7 +403,7 @@ export default function Simulation() {
                       // register hit
                       if (!s.hitEnemies) s.hitEnemies = new Set();
                       s.hitEnemies.add(entry.id);
-                      entry.hp = (entry.hp || 3) - 1;
+                      entry.hp = (entry.hp ?? 10) - 1;
                       if (entry.hp <= 0) {
                         // explode and remove enemy
                         try {
@@ -1103,7 +1103,7 @@ export default function Simulation() {
                   })();
 
                   const nowSec = (performance.now() || Date.now()) / 1000;
-                  enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6, shootAudio: enemyShootAudio, nextFireAt: nowSec + 0.6 + Math.random() * 1.5, hp: 3, id: enemyIdCounterRef.current++ });
+                  enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6, shootAudio: enemyShootAudio, nextFireAt: nowSec + 0.6 + Math.random() * 1.5, hp: 10, id: enemyIdCounterRef.current++ });
                 }
               } catch (err) {
                 console.warn('Failed to spawn enemy jets:', err);
