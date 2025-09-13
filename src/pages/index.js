@@ -15,6 +15,9 @@ export default function Home() {
   const [currentModelUrl, setCurrentModelUrl] = useState("");
   const [error, setError] = useState("");
   const [showGenerator, setShowGenerator] = useState(false);
+  // Unified flow state
+  const [flowRunning, setFlowRunning] = useState(false);
+  const [flowStep, setFlowStep] = useState("idle"); // idle | enhancing | generating-image | converting-3d | done
   
   // Preview modal state
   const [previewModel, setPreviewModel] = useState(null); // { src, title }
@@ -70,7 +73,7 @@ export default function Home() {
   const enhancePrompt = async () => {
     if (!prompt.trim()) {
       setError("Please enter a prompt");
-      return;
+      return null;
     }
 
     setLoading(true);
@@ -89,23 +92,26 @@ export default function Home() {
 
       if (response.ok) {
         setEnhancedPrompt(data.enhancedPrompt);
+        return data.enhancedPrompt;
       } else {
         setError(data.error || "Failed to enhance prompt");
+        return null;
       }
     } catch (err) {
       setError("An error occurred while enhancing the prompt");
       console.error(err);
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
-  const generateImage = async () => {
-    const promptToUse = enhancedPrompt || prompt;
+  const generateImage = async (promptOverride) => {
+    const promptToUse = promptOverride || enhancedPrompt || prompt;
     
     if (!promptToUse.trim()) {
       setError("Please enter or enhance a prompt first");
-      return;
+      return null;
     }
 
     setGeneratingImage(true);
@@ -123,26 +129,30 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
+        const nowId = Date.now();
+        const nextIndex = generationHistory.length;
         const newGeneration = {
-          id: Date.now(),
+          id: nowId,
           originalPrompt: prompt,
-          enhancedPrompt: enhancedPrompt,
+          enhancedPrompt: promptOverride || enhancedPrompt || "",
           imageUrl: data.image,
           modelUrl: null,
           modelId: null,
           timestamp: new Date().toISOString()
         };
-        
         setCurrentImageUrl(data.image);
         setCurrentModelUrl("");
         setGenerationHistory(prev => [...prev, newGeneration]);
-        setSelectedHistoryIndex(generationHistory.length);
+        setSelectedHistoryIndex(nextIndex);
+        return { index: nextIndex, imageUrl: data.image };
       } else {
         setError(data.error || "Failed to generate image");
+        return null;
       }
     } catch (err) {
       setError("An error occurred while generating the image");
       console.error(err);
+      return null;
     } finally {
       setGeneratingImage(false);
     }
@@ -153,7 +163,7 @@ export default function Home() {
   const generate3DModel = async (imageUrl, historyIndex) => {
     if (!imageUrl) {
       setError("Please generate an image first");
-      return;
+      return null;
     }
 
     setGenerating3D(true);
@@ -216,14 +226,45 @@ export default function Home() {
         if (imageUrl === currentImageUrl) {
           setCurrentModelUrl(resolvedModelUrl);
         }
+        return resolvedModelUrl;
       } else {
         setError(data.error || "Failed to generate 3D model");
+        return null;
       }
     } catch (err) {
       setError("An error occurred while generating the 3D model");
       console.error(err);
+      return null;
     } finally {
       setGenerating3D(false);
+    }
+  };
+
+  // Orchestrate full flow: enhance -> image -> 3D
+  const generateAircraft = async () => {
+    if (!prompt.trim()) {
+      setError('Please enter a prompt');
+      return;
+    }
+    setFlowRunning(true);
+    setFlowStep('enhancing');
+    setError('');
+    try {
+      const enhanced = await enhancePrompt();
+      // Show the enhanced prompt UI as soon as it's available (state already set in enhancePrompt)
+      const promptToUse = enhanced || enhancedPrompt || prompt;
+      setFlowStep('generating-image');
+      const imgRes = await generateImage(promptToUse);
+      if (!imgRes) throw new Error('Image generation failed');
+      setFlowStep('converting-3d');
+      const modelUrl = await generate3DModel(imgRes.imageUrl, imgRes.index);
+      if (!modelUrl) throw new Error('3D conversion failed');
+      setFlowStep('done');
+    } catch (e) {
+      console.error(e);
+      setFlowStep('idle');
+    } finally {
+      setFlowRunning(false);
     }
   };
 
@@ -423,39 +464,29 @@ export default function Home() {
                   />
                 </div>
 
-                {/* Action Buttons */}
+                {/* Action Buttons - Unified Flow */}
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={enhancePrompt}
-                    disabled={loading || !prompt.trim()}
-                    className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-violet-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-violet-400 hover:to-violet-500 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:transform-none"
-                  >
-                    {loading ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        Enhancing...
-                      </div>
-                    ) : (
-                      <>✨ Enhance with AI</>
-                    )}
-                  </button>
-                  <button
-                    onClick={generateImage}
-                    disabled={generatingImage || (!prompt.trim() && !enhancedPrompt)}
+                    onClick={generateAircraft}
+                    disabled={flowRunning || !prompt.trim()}
                     className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-500 text-black font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-cyan-300 hover:to-cyan-400 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:transform-none"
                   >
-                    {generatingImage ? (
+                    {flowRunning ? (
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
-                        Generating...
+                        {flowStep === 'enhancing' && 'enchanging prompt'}
+                        {flowStep === 'generating-image' && 'Generating image'}
+                        {flowStep === 'converting-3d' && 'Converting to 3D model'}
+                        {flowStep === 'done' && 'Done'}
                       </div>
                     ) : (
-                      <>🎨 Generate Image</>
+                      <>🚀 Generate Aircraft</>
                     )}
                   </button>
                   <button
                     onClick={startNewGeneration}
-                    className="px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-all duration-200"
+                    disabled={flowRunning}
+                    className="px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-all duration-200 disabled:opacity-50"
                   >
                     📝 New
                   </button>
@@ -497,47 +528,23 @@ export default function Home() {
                       className="w-full h-auto"
                     />
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      onClick={() => generate3DModel(currentImageUrl, selectedHistoryIndex)}
-                      disabled={generating3D}
-                      className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:transform-none"
-                    >
-                      {generating3D ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                          Converting to 3D...
-                        </div>
-                      ) : (
-                        <>🎯 Convert to 3D</>
-                      )}
-                    </button>
-                  </div>
+                  {currentModelUrl ? (
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={() => setPreviewModel({ src: currentModelUrl, title: (enhancedPrompt || prompt || "3D Model") })}
+                        className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
+                      >
+                        👁 Quick Preview
+                      </button>
+                      <Link
+                        href={`/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
+                        className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
+                      >
+                        🎮 AR Simulation
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
-              </section>
-            )}
-
-            {/* 3D Model Display */}
-            {currentModelUrl && (
-              <section className="glass-card rounded-2xl p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-green-400 text-lg">✅</span>
-                  <h3 className="text-lg font-semibold">3D Model Ready!</h3>
-                </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      onClick={() => setPreviewModel({ src: currentModelUrl, title: (enhancedPrompt || prompt || "3D Model") })}
-                      className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
-                    >
-                      👁 Quick Preview
-                    </button>
-                    <Link
-                      href={`/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
-                      className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
-                    >
-                      🎮 AR Simulation
-                    </Link>
-                  </div>
               </section>
             )}
 
