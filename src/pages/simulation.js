@@ -67,28 +67,18 @@ export default function Simulation() {
     }
 
     try {
-      // Create renderer with proper AR settings
       const renderer = new THREE.WebGLRenderer({ 
         antialias: true, 
-        alpha: true,
-        preserveDrawingBuffer: true
+        alpha: true 
       });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
       
-      // Essential for AR - enable auto clear and set clear alpha
-      renderer.autoClear = false;
-      renderer.setClearColor(0x000000, 0);
-      
-      // Set reference space type on renderer BEFORE session
-      renderer.xr.setReferenceSpaceType('local');
-      
       rendererRef.current = renderer;
 
-      // Create scene with transparent background for AR
+      // Create scene
       const scene = new THREE.Scene();
-      // Don't set scene background - let camera passthrough show
       sceneRef.current = scene;
 
       // Create camera
@@ -97,57 +87,58 @@ export default function Simulation() {
 
       // Add lighting
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      light.position.set(0.5, 1, 0.25);
       scene.add(light);
 
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.3);
-      directionalLight.position.set(1, 1, 1).normalize();
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(0, 10, 0);
       scene.add(directionalLight);
 
       // Request AR session
-      const sessionInit = {
-        requiredFeatures: ['dom-overlay'],
-        optionalFeatures: ['local-floor'],
-        domOverlay: { root: document.body }
-      };
+      const session = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['local-floor', 'dom-overlay'],
+        domOverlay: { root: document.getElementById('ar-ui-container') },
+      });
       
-      const session = await navigator.xr.requestSession('immersive-ar', sessionInit);
       sessionRef.current = session;
 
       await renderer.xr.setSession(session);
 
       // Handle session end
       session.addEventListener('end', () => {
-        setIsARActive(false);
-        sessionRef.current = null;
-        aircraftRef.current = null;
-        setIsLoadingModel(false);
+        exitAR();
       });
 
-      // Request reference space AFTER session
-      session.requestReferenceSpace('local').then((refSpace) => {
-        // Append to container BEFORE starting render loop
-        containerRef.current.appendChild(renderer.domElement);
+      const refSpace = await session.requestReferenceSpace('local-floor');
 
-        // Start render loop with proper AR rendering
-        renderer.setAnimationLoop(() => {
-          // Clear the screen
-          renderer.clear();
-          // Render the scene (aircraft will appear over camera feed)
+      // Append to container
+      containerRef.current.appendChild(renderer.domElement);
+
+      // Start XR-driven render loop
+      renderer.setAnimationLoop((timestamp, frame) => {
+        if (!frame) return;
+
+        const pose = frame.getViewerPose(refSpace);
+        if (pose) {
+          const view = pose.views[0];
+          const viewport = session.renderState.baseLayer.getViewport(view);
+          renderer.setSize(viewport.width, viewport.height);
+          
+          camera.matrix.fromArray(view.transform.matrix);
+          camera.projectionMatrix.fromArray(view.projectionMatrix);
+          camera.updateMatrixWorld(true);
+
           renderer.render(scene, camera);
-        });
-        
-        setIsARActive(true);
-        setError('');
-        
-        // Load aircraft AFTER AR is active
-        if (selectedModel) {
-          placeAircraft();
         }
-      }).catch((err) => {
-        console.error('Failed to get reference space:', err);
-        setError('Failed to initialize AR reference space: ' + err.message);
       });
-
+      
+      setIsARActive(true);
+      setError('');
+      
+      // Load aircraft AFTER AR is active
+      if (selectedModel) {
+        placeAircraft();
+      }
     } catch (err) {
       console.error('AR initialization failed:', err);
       setError('Failed to start AR session: ' + err.message);
@@ -167,10 +158,9 @@ export default function Simulation() {
         (gltf) => {
           const aircraft = gltf.scene;
           
-          // Position aircraft in front of user at eye level
-          aircraft.scale.setScalar(0.3); // Reasonable scale for AR viewing
-          aircraft.position.set(0, 0, -2); // 2 meters in front of user
-          aircraft.rotation.set(0, Math.PI, 0); // Face towards user
+          // Position aircraft close to player spawn
+          aircraft.scale.setScalar(0.2); // Adjusted scale
+          aircraft.position.set(0, -0.5, -2); // 2 meters in front, slightly below eye level
           
           sceneRef.current.add(aircraft);
           aircraftRef.current = aircraft;
@@ -196,21 +186,28 @@ export default function Simulation() {
 
   const exitAR = () => {
     if (sessionRef.current) {
-      sessionRef.current.end();
+      sessionRef.current.end().catch(err => console.error("Failed to end session:", err));
     }
-    if (rendererRef.current && containerRef.current && rendererRef.current.domElement.parentNode) {
-      containerRef.current.removeChild(rendererRef.current.domElement);
+    
+    if (rendererRef.current) {
+      rendererRef.current.setAnimationLoop(null);
+      if (containerRef.current && rendererRef.current.domElement.parentNode) {
+        containerRef.current.removeChild(rendererRef.current.domElement);
+      }
       rendererRef.current.dispose();
+      rendererRef.current = null;
     }
-    // Reset refs
+
+    sessionRef.current = null;
     aircraftRef.current = null;
     setIsARActive(false);
     setIsLoadingModel(false);
+    setError('');
   };
 
   return (
     <div className="min-h-dvh bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white">
-      <div ref={containerRef} className="w-full h-full" />
+      <div ref={containerRef} className="w-full h-dvh absolute top-0 left-0" />
       
       {!isARActive && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
@@ -249,7 +246,7 @@ export default function Simulation() {
                     </button>
                     
                     <p className="text-xs text-white/60">
-                      Aircraft will appear close to you in AR space
+                      Aircraft will appear in front of you in AR space
                     </p>
                   </>
                 ) : (
@@ -276,29 +273,31 @@ export default function Simulation() {
         </div>
       )}
       
-      {isARActive && (
-        <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
-          <button
-            onClick={exitAR}
-            className="px-4 py-2 bg-red-500/80 backdrop-blur rounded-xl text-white font-medium"
-          >
-            Exit AR
-          </button>
-          
-          {isLoadingModel && (
-            <div className="px-4 py-2 bg-black/60 backdrop-blur rounded-xl text-white text-sm flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-              Loading aircraft...
-            </div>
-          )}
-          
-          {!isLoadingModel && aircraftRef.current && (
-            <div className="px-4 py-2 bg-green-500/60 backdrop-blur rounded-xl text-white text-sm">
-              Aircraft loaded
-            </div>
-          )}
-        </div>
-      )}
+      <div id="ar-ui-container">
+        {isARActive && (
+          <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
+            <button
+              onClick={exitAR}
+              className="px-4 py-2 bg-red-500/80 backdrop-blur rounded-xl text-white font-medium"
+            >
+              Exit AR
+            </button>
+            
+            {isLoadingModel && (
+              <div className="px-4 py-2 bg-black/60 backdrop-blur rounded-xl text-white text-sm flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Loading aircraft...
+              </div>
+            )}
+            
+            {!isLoadingModel && aircraftRef.current && (
+              <div className="px-4 py-2 bg-green-500/60 backdrop-blur rounded-xl text-white text-sm">
+                Aircraft loaded
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <style jsx>{`
         .glass {
