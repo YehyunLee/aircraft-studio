@@ -41,6 +41,7 @@ export default function Simulation() {
   const SHOT_COOLDOWN = 0.18; // seconds between shots
   const SHOT_SPEED = 8.0; // meters per second
   const isFiringRef = useRef(false); // hold-to-fire flag
+  const AIM_SPREAD_DEG = 10.0; // random aim cone half-angle in degrees
 
   // AR session refs
   const rendererRef = useRef();
@@ -443,6 +444,27 @@ export default function Simulation() {
             // Clamp the beam to the target distance but keep a small minimum so it is visible
             const minBeamLength = 0.7;
             beamLength = Math.max(minBeamLength, Math.min(maxBeamLength, nearestDist));
+            // Apply a small random angular spread so aim is not perfectly precise
+            const spread = THREE.MathUtils.degToRad(AIM_SPREAD_DEG);
+            const r = Math.sqrt(Math.random()); // concentrate samples toward center
+            const theta = Math.random() * Math.PI * 2.0;
+            const offsetMag = Math.tan(spread) * r;
+            const dx = offsetMag * Math.cos(theta);
+            const dy = offsetMag * Math.sin(theta);
+            // Build orthonormal basis around dir
+            const tempUp = new THREE.Vector3(0, 1, 0);
+            const right = new THREE.Vector3().crossVectors(dir, tempUp);
+            if (right.lengthSq() < 1e-6) {
+              tempUp.set(1, 0, 0);
+              right.crossVectors(dir, tempUp);
+            }
+            right.normalize();
+            const upPerp = new THREE.Vector3().crossVectors(right, dir).normalize();
+            const aimed = new THREE.Vector3().copy(dir)
+              .addScaledVector(right, dx)
+              .addScaledVector(upPerp, dy)
+              .normalize();
+            dir.copy(aimed);
           } else {
             dir.copy(fwd);
           }
