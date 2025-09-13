@@ -394,20 +394,55 @@ export default function Simulation() {
       if (now - (lastShotTimeRef.current || 0) < SHOT_COOLDOWN) return;
       lastShotTimeRef.current = now;
 
-      // Direction vectors from aircraft orientation
+      // Base orientation vectors
       const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(aircraft.quaternion).normalize();
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(aircraft.quaternion).normalize();
 
-      const beamLength = 2.6; // meters
+      // Beam and muzzle parameters
+      const maxBeamLength = 2.6; // meters
       const beamWidth = 0.035; // meters
-      const startOffset = 0.9; // forward from nose
+      const startOffset = 0.9; // forward from nose (local Z)
       const slightUp = 0.06; // raise beam slightly
 
-      const startPos = new THREE.Vector3().copy(aircraft.position)
-        .addScaledVector(fwd, startOffset)
-        .addScaledVector(up, slightUp);
+      // Compute muzzle position in local space for accuracy, then convert to world
+      const muzzleLocal = new THREE.Vector3(0, slightUp, startOffset);
+      const startPos = muzzleLocal.clone();
+      aircraft.localToWorld(startPos);
 
-      const geo = new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1);
+      // Auto-aim: find nearest enemy to the muzzle
+      let dir = new THREE.Vector3().copy(fwd);
+      let beamLength = maxBeamLength;
+      try {
+        const enemies = enemiesRef.current || [];
+        let nearest = null;
+        let nearestDist = Infinity;
+        for (let i = 0; i < enemies.length; i++) {
+          const obj = enemies[i] && enemies[i].object;
+          if (!obj) continue;
+          const d = obj.position.distanceTo(startPos);
+          if (d < nearestDist) {
+            nearestDist = d;
+            nearest = obj;
+          }
+        }
+        if (nearest) {
+          dir.copy(nearest.position).sub(startPos);
+          if (dir.lengthSq() > 1e-6) {
+            dir.normalize();
+            // Optionally clamp the beam to the target distance so it doesn't overshoot when close
+            beamLength = Math.min(maxBeamLength, nearestDist);
+          } else {
+            dir.copy(fwd);
+          }
+        }
+      } catch (e) {
+        // fallback to forward if anything goes wrong
+        dir.copy(fwd);
+      }
+
+  const geo = new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1);
+  // Move geometry so local origin is at the base (muzzle), not the center
+  geo.translate(0, beamLength * 0.5, 0);
       const mat = new THREE.ShaderMaterial({
         transparent: true,
         depthWrite: false,
@@ -449,17 +484,17 @@ export default function Simulation() {
       });
 
       const mesh = new THREE.Mesh(geo, mat);
-      // Align plane +Y with forward
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), fwd);
+      // Align plane +Y with aim direction
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
       mesh.quaternion.copy(q);
-      // Shift so base starts at muzzle
-      mesh.position.copy(startPos).addScaledVector(fwd, beamLength * 0.5);
+  // Place base exactly at the muzzle
+  mesh.position.copy(startPos);
       mesh.frustumCulled = false;
       mesh.renderOrder = 999;
       scene.add(mesh);
 
-      // store forward velocity for motion
-      const vel = new THREE.Vector3().copy(fwd).multiplyScalar(SHOT_SPEED);
+  // store velocity for motion along aim direction
+  const vel = new THREE.Vector3().copy(dir).multiplyScalar(SHOT_SPEED);
       shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel });
     } catch (e) {
       // ignore
