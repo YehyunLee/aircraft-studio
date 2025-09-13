@@ -48,6 +48,13 @@ export default function Simulation() {
   const audioListenerRef = useRef();
   const propellerSoundRef = useRef();
   const shootingSoundRef = useRef();
+  const explosionSoundRef = useRef(); // non-positional explosion sound
+
+  // Explosion refs
+  const explosionsRef = useRef([]); // array of { mesh, start, life }
+
+  // Enemy id counter for hit tracking
+  const enemyIdCounterRef = useRef(1);
 
   // AR session refs
   const rendererRef = useRef();
@@ -178,6 +185,15 @@ export default function Simulation() {
         shootingSound.setVolume(0.8);
       });
       shootingSoundRef.current = shootingSound;
+
+      // Load explosion sound (fixed, not distance-based)
+      const explosionSound = new THREE.Audio(audioListener);
+      audioLoader.load('/explosion.mp3', (buffer) => {
+        explosionSound.setBuffer(buffer);
+        explosionSound.setLoop(false);
+        explosionSound.setVolume(1.0);
+      });
+      explosionSoundRef.current = explosionSound;
 
 
       // Add lighting
@@ -361,6 +377,53 @@ export default function Simulation() {
                 s.material.uniforms.uLife.value = THREE.MathUtils.clamp(t, 0, 1);
                 s.material.uniforms.uTime.value = nowSec;
               }
+
+              // Collision: player shots damage enemies
+              try {
+                if (s.owner === 'player' && s.mesh && s.dir && s.length) {
+                  const a = s.mesh.position;
+                  const dir = s.dir; // normalized
+                  const b = tmpVec4.current.copy(dir).multiplyScalar(s.length).add(a);
+                  const enemies = enemiesRef.current || [];
+                  for (let ei = enemies.length - 1; ei >= 0; --ei) {
+                    const entry = enemies[ei];
+                    if (!entry || !entry.object || entry.dead) continue;
+                    // ensure we don't multi-hit same enemy with same shot
+                    if (s.hitEnemies && s.hitEnemies.has(entry.id)) continue;
+                    const p = entry.object.position;
+                    // distance from point to segment AB
+                    const ab = tmpVec.current.copy(b).sub(a);
+                    const ap = tmpVec2.current.copy(p).sub(a);
+                    const abLen2 = Math.max(1e-6, ab.lengthSq());
+                    const tSeg = THREE.MathUtils.clamp(ap.dot(ab) / abLen2, 0, 1);
+                    const closest = tmpVec3.current.copy(a).addScaledVector(ab, tSeg);
+                    const dist = p.distanceTo(closest);
+                    const hitRadius = (entry.radius || 0.6) + (s.beamWidth || 0.04) * 0.6; // generous hit radius
+                    if (dist <= hitRadius) {
+                      // register hit
+                      if (!s.hitEnemies) s.hitEnemies = new Set();
+                      s.hitEnemies.add(entry.id);
+                      entry.hp = (entry.hp || 3) - 1;
+                      if (entry.hp <= 0) {
+                        // explode and remove enemy
+                        try {
+                          explodeEnemy(entry);
+                        } catch (_) {}
+                        // remove from array
+                        const idx = enemies.indexOf(entry);
+                        if (idx >= 0) enemies.splice(idx, 1);
+                      }
+                      // Optionally, consume the shot on hit (so it doesn't keep hitting others). Comment out to allow piercing.
+                      // if (s.mesh && s.mesh.parent) s.mesh.parent.remove(s.mesh);
+                      // if (s.mesh && s.mesh.geometry) s.mesh.geometry.dispose();
+                      // if (s.material) s.material.dispose();
+                      // shots.splice(i, 1);
+                      // continue; // move on to next shot
+                    }
+                  }
+                }
+              } catch (_) {}
+
               if (t >= 1.0) {
                 try {
                   if (s.mesh && s.mesh.parent) s.mesh.parent.remove(s.mesh);
@@ -373,6 +436,30 @@ export default function Simulation() {
           } catch (err) {
             // ignore shot update errors
           }
+
+          // Update explosions (expand and fade)
+          try {
+            const nowSec = (performance.now() || Date.now()) / 1000;
+            const explosions = explosionsRef.current || [];
+            for (let i = explosions.length - 1; i >= 0; --i) {
+              const e = explosions[i];
+              const t = (nowSec - e.start) / e.life;
+              if (e.mesh && e.mesh.material) {
+                const tt = THREE.MathUtils.clamp(t, 0, 1);
+                const scale = THREE.MathUtils.lerp(0.3, 2.2, tt);
+                e.mesh.scale.setScalar(scale);
+                e.mesh.material.opacity = 0.95 * (1.0 - tt);
+              }
+              if (t >= 1.0) {
+                try {
+                  if (e.mesh && e.mesh.parent) e.mesh.parent.remove(e.mesh);
+                  if (e.mesh && e.mesh.geometry) e.mesh.geometry.dispose();
+                  if (e.mesh && e.mesh.material) e.mesh.material.dispose();
+                } catch (_) {}
+                explosions.splice(i, 1);
+              }
+            }
+          } catch (_) {}
 
           // Handle hold-to-fire auto firing gated by cooldown
           try {
@@ -615,7 +702,7 @@ export default function Simulation() {
 
   // store velocity for motion along aim direction
   const vel = new THREE.Vector3().copy(dir).multiplyScalar(SHOT_SPEED);
-      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel });
+      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel, owner: 'player', dir: dir.clone(), length: beamLength, beamWidth });
     } catch (e) {
       // ignore
     }
@@ -731,10 +818,53 @@ export default function Simulation() {
       scene.add(mesh);
 
       const vel = new THREE.Vector3().copy(dir).multiplyScalar(SHOT_SPEED * 0.95);
-      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel });
+      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel, owner: 'enemy', dir: dir.clone(), length: beamLength, beamWidth });
     } catch (_) {
       // ignore
     }
+  };
+
+  // Create a simple expanding/fading explosion at a world position and play fixed explosion audio
+  const explodeEnemy = (entry) => {
+    const scene = sceneRef.current;
+    const obj = entry && entry.object;
+    if (!scene || !obj) return;
+
+    // Play explosion sound (fixed, non-positional)
+    try {
+      if (explosionSoundRef.current && explosionSoundRef.current.buffer) {
+        if (explosionSoundRef.current.isPlaying) explosionSoundRef.current.stop();
+        explosionSoundRef.current.play();
+      }
+    } catch (_) {}
+
+    // Create explosion mesh
+    const pos = obj.position.clone();
+    const geo = new THREE.SphereGeometry(0.25, 16, 12);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffaa33,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    mesh.renderOrder = 1000;
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    const now = (performance.now() || Date.now()) / 1000;
+    explosionsRef.current.push({ mesh, start: now, life: 0.6 });
+
+    // Remove enemy object from scene
+    try {
+      if (entry.shootAudio && entry.shootAudio.isPlaying) entry.shootAudio.stop();
+    } catch (_) {}
+    try {
+      if (entry.controller && typeof entry.controller.dispose === 'function') entry.controller.dispose();
+      if (obj.parent) obj.parent.remove(obj);
+    } catch (_) {}
+    entry.dead = true;
   };
 
   const placeAircraft = async () => {
@@ -973,7 +1103,7 @@ export default function Simulation() {
                   })();
 
                   const nowSec = (performance.now() || Date.now()) / 1000;
-                  enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6, shootAudio: enemyShootAudio, nextFireAt: nowSec + 0.6 + Math.random() * 1.5 });
+                  enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6, shootAudio: enemyShootAudio, nextFireAt: nowSec + 0.6 + Math.random() * 1.5, hp: 3, id: enemyIdCounterRef.current++ });
                 }
               } catch (err) {
                 console.warn('Failed to spawn enemy jets:', err);
