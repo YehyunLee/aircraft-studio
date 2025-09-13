@@ -7,7 +7,9 @@ export default function Home() {
   const [enhancedPrompt, setEnhancedPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [generating3D, setGenerating3D] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
+  const [modelUrl, setModelUrl] = useState("");
   const [error, setError] = useState("");
   const [showGenerator, setShowGenerator] = useState(false);
 
@@ -91,10 +93,59 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
+  const generate3DModel = async () => {
+    if (!imageUrl) {
+      setError("Please generate an image first");
+      return;
+    }
+
+    setGenerating3D(true);
+    setError("");
+    setModelUrl("");
+
+    try {
+      const response = await fetch("/api/generate-3d", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          imageData: imageUrl,
+          filename: `aircraft-${Date.now()}.glb`
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setModelUrl(data.modelUrl);
+      } else {
+        setError(data.error || "Failed to generate 3D model");
+      }
+    } catch (err) {
+      setError("An error occurred while generating the 3D model");
+      console.error(err);
+    } finally {
+      setGenerating3D(false);
+    }
+  };
+
+  const download3DModel = () => {
+    if (!modelUrl) return;
+
+    const link = document.createElement("a");
+    link.href = modelUrl;
+    link.download = modelUrl.split("/").pop();
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const resetGenerator = () => {
     setPrompt("");
     setEnhancedPrompt("");
     setImageUrl("");
+    setModelUrl("");
     setError("");
   };
 
@@ -215,12 +266,19 @@ export default function Home() {
                       className="w-full h-auto"
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={downloadImage}
                       className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-colors"
                     >
-                      💾 Download
+                      💾 Download Image
+                    </button>
+                    <button
+                      onClick={generate3DModel}
+                      disabled={generating3D}
+                      className="px-3 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-cyan-400 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                    >
+                      {generating3D ? "Converting to 3D..." : "🎯 Convert to 3D"}
                     </button>
                     <button
                       onClick={resetGenerator}
@@ -228,6 +286,23 @@ export default function Home() {
                     >
                       🔄 New Design
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {modelUrl && (
+                <div className="p-3 rounded-lg bg-gradient-to-r from-violet-500/10 to-cyan-400/10 border border-cyan-400/20">
+                  <p className="text-xs text-cyan-300 mb-2">✅ 3D Model Generated!</p>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={download3DModel}
+                      className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-sm font-medium hover:bg-cyan-300 transition-colors"
+                    >
+                      📦 Download GLB File
+                    </button>
+                    <p className="text-xs text-white/60 flex items-center">
+                      Model saved: {modelUrl.split("/").pop()}
+                    </p>
                   </div>
                 </div>
               )}
