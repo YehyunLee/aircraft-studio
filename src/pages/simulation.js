@@ -39,6 +39,7 @@ export default function Simulation() {
   const SHOT_LIFETIME = 0.7; // seconds
   const lastShotTimeRef = useRef(0);
   const SHOT_COOLDOWN = 0.18; // seconds between shots
+  const SHOT_SPEED = 8.0; // meters per second
 
   // AR session refs
   const rendererRef = useRef();
@@ -273,6 +274,10 @@ export default function Simulation() {
             for (let i = shots.length - 1; i >= 0; --i) {
               const s = shots[i];
               const t = (nowSec - s.start) / s.life;
+              // move beam forward along its velocity
+              if (s.velocity && s.mesh) {
+                s.mesh.position.addScaledVector(s.velocity, delta);
+              }
               if (s.material && s.material.uniforms) {
                 s.material.uniforms.uLife.value = THREE.MathUtils.clamp(t, 0, 1);
                 s.material.uniforms.uTime.value = nowSec;
@@ -449,10 +454,13 @@ export default function Simulation() {
       mesh.quaternion.copy(q);
       // Shift so base starts at muzzle
       mesh.position.copy(startPos).addScaledVector(fwd, beamLength * 0.5);
+      mesh.frustumCulled = false;
       mesh.renderOrder = 999;
       scene.add(mesh);
 
-      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat });
+      // store forward velocity for motion
+      const vel = new THREE.Vector3().copy(fwd).multiplyScalar(SHOT_SPEED);
+      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel });
     } catch (e) {
       // ignore
     }
