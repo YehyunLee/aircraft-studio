@@ -477,16 +477,40 @@ export default function Simulation() {
                     const radius = 0.6;
 
                     function update(dt, idx, allEnemies) {
-                      // Basic wander: small random steering
-                      const jitter = 0.6;
-                      velocity.x += (Math.random() - 0.5) * jitter * dt;
-                      velocity.y += (Math.random() - 0.5) * (jitter * 0.4) * dt;
-                      velocity.z += (Math.random() - 0.5) * (jitter * 0.2) * dt;
+                      // Pursuit steering toward player's aircraft with some wander + avoidance
+                      const jitter = 0.4;
+
+                      // If we have a player aircraft, steer toward it
+                      if (aircraftRef && aircraftRef.current) {
+                        // desired velocity toward player
+                        tmp.subVectors(aircraftRef.current.position, enemyObj.position);
+                        const dist = tmp.length();
+                        if (dist > 0.001) {
+                          tmp.normalize();
+                          // desired speed scales slightly with distance
+                          const desiredSpeed = THREE.MathUtils.clamp(0.6 + dist * 0.08, 0.4, 2.2);
+                          tmp.multiplyScalar(desiredSpeed);
+
+                          // steering = desired - current velocity
+                          tmp.subVectors(tmp, velocity);
+                          // apply steering force (scaled by dt)
+                          velocity.addScaledVector(tmp, 2.5 * dt);
+                        }
+
+                        // small random jitter so pursuit looks natural
+                        velocity.x += (Math.random() - 0.5) * jitter * dt;
+                        velocity.y += (Math.random() - 0.5) * (jitter * 0.6) * dt;
+                      } else {
+                        // fallback wander when no player present
+                        velocity.x += (Math.random() - 0.5) * jitter * dt;
+                        velocity.y += (Math.random() - 0.5) * (jitter * 0.4) * dt;
+                        velocity.z += (Math.random() - 0.5) * (jitter * 0.2) * dt;
+                      }
 
                       // Limit speeds
-                      velocity.x = THREE.MathUtils.clamp(velocity.x, -1.2, 1.2);
-                      velocity.y = THREE.MathUtils.clamp(velocity.y, -0.8, 0.8);
-                      velocity.z = THREE.MathUtils.clamp(velocity.z, -2.5, -0.2);
+                      velocity.x = THREE.MathUtils.clamp(velocity.x, -1.6, 1.6);
+                      velocity.y = THREE.MathUtils.clamp(velocity.y, -1.0, 1.0);
+                      velocity.z = THREE.MathUtils.clamp(velocity.z, -3.0, -0.15);
 
                       // Simple collision avoidance: repel from nearby enemies
                       for (let j = 0; j < allEnemies.length; ++j) {
@@ -506,17 +530,21 @@ export default function Simulation() {
                       // Integrate
                       enemyObj.position.addScaledVector(velocity, dt);
 
-                      // Slowly orient to velocity direction
+                      // Slowly orient to velocity direction (or toward player if close)
                       forward.copy(velocity);
+                      // If velocity is tiny and we have a player, face the player instead
+                      if (forward.lengthSq() < 1e-6 && aircraftRef && aircraftRef.current) {
+                        forward.subVectors(aircraftRef.current.position, enemyObj.position);
+                      }
                       forward.y = 0; // ignore pitch for yaw alignment
                       if (forward.lengthSq() > 1e-6) {
                         forward.normalize();
                         const targetQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), forward);
-                        enemyObj.quaternion.slerp(targetQ, 0.06);
+                        enemyObj.quaternion.slerp(targetQ, 0.12);
                       }
 
                       // Keep within a rough boundary around player start to avoid flying away
-                      const maxDist = 12.0;
+                      const maxDist = 18.0;
                       if (enemyObj.position.length() > maxDist) {
                         enemyObj.position.multiplyScalar(0.75);
                       }
