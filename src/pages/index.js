@@ -148,16 +148,7 @@ export default function Home() {
     }
   };
 
-  const downloadImage = (imageUrl) => {
-    if (!imageUrl) return;
 
-    const link = document.createElement("a");
-    link.href = imageUrl;
-    link.download = `aircraft-${Date.now()}.jpg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   const generate3DModel = async (imageUrl, historyIndex) => {
     if (!imageUrl) {
@@ -236,16 +227,7 @@ export default function Home() {
     }
   };
 
-  const download3DModel = (modelUrl) => {
-    if (!modelUrl) return;
 
-    const link = document.createElement("a");
-    link.href = modelUrl;
-    link.download = modelUrl.split("/").pop();
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   const removeFromHistory = (index, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
@@ -517,12 +499,6 @@ export default function Home() {
                   </div>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button
-                      onClick={() => downloadImage(currentImageUrl)}
-                      className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
-                    >
-                      💾 Download Image
-                    </button>
-                    <button
                       onClick={() => generate3DModel(currentImageUrl, selectedHistoryIndex)}
                       disabled={generating3D}
                       className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:transform-none"
@@ -548,26 +524,20 @@ export default function Home() {
                   <span className="text-green-400 text-lg">✅</span>
                   <h3 className="text-lg font-semibold">3D Model Ready!</h3>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={() => download3DModel(currentModelUrl)}
-                    className="flex-1 px-4 py-3 rounded-xl bg-cyan-400 text-black font-semibold hover:bg-cyan-300 transition-all duration-200"
-                  >
-                    📦 Download GLB File
-                  </button>
-                  <button
-                    onClick={() => setPreviewModel({ src: currentModelUrl, title: (enhancedPrompt || prompt || "3D Model") })}
-                    className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
-                  >
-                    👁 Quick Preview
-                  </button>
-                  <Link
-                    href={`/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
-                    className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
-                  >
-                    🎮 AR Simulation
-                  </Link>
-                </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={() => setPreviewModel({ src: currentModelUrl, title: (enhancedPrompt || prompt || "3D Model") })}
+                      className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
+                    >
+                      👁 Quick Preview
+                    </button>
+                    <Link
+                      href={`/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
+                      className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
+                    >
+                      🎮 AR Simulation
+                    </Link>
+                  </div>
               </section>
             )}
 
@@ -603,54 +573,33 @@ export default function Home() {
                              </div>
                            </div>
                            <p className="text-sm text-white/90 truncate mb-3">{item.originalPrompt}</p>
-                           <div className="flex gap-2">
-                             <button
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 downloadImage(item.imageUrl);
-                               }}
-                               className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
-                               title="Download Image"
-                             >
-                               💾
-                             </button>
-                             {(item.modelUrl || item.modelId) && (
-                               <>
-                                 <button
-                                   onClick={async (e) => {
-                                     e.stopPropagation();
-                                     const url = await resolveHistoryModelUrl(item);
-                                     if (url) setPreviewModel({ src: url, title: (item.originalPrompt || "3D Model") });
-                                   }}
-                                   className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
-                                   title="Quick Preview"
-                                 >
-                                   👁
-                                 </button>
-                                 <button
-                                   onClick={async (e) => {
-                                     e.stopPropagation();
-                                     const url = await resolveHistoryModelUrl(item);
-                                     if (url) window.location.href = `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`;
-                                   }}
-                                   className="text-xs text-cyan-300 hover:text-cyan-200 transition-colors px-2 py-1 rounded hover:bg-cyan-300/20"
-                                   title="AR Preview"
-                                 >
-                                   🎮
-                                 </button>
-                                 <button
-                                   onClick={async (e) => {
-                                     e.stopPropagation();
-                                     const url = await resolveHistoryModelUrl(item);
-                                     if (url) download3DModel(url);
-                                   }}
-                                   className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
-                                   title="Download 3D Model"
-                                 >
-                                   📦
-                                 </button>
-                               </>
-                              )}
+                            <div className="flex gap-2">
+                              {(item.modelUrl || item.modelId) && (
+                                <>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const url = await resolveHistoryModelUrl(item);
+                                      if (url) setPreviewModel({ src: url, title: (item.originalPrompt || "3D Model") });
+                                    }}
+                                    className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
+                                    title="Quick Preview"
+                                  >
+                                    👁
+                                  </button>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const url = await resolveHistoryModelUrl(item);
+                                      if (url) window.location.href = `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`;
+                                    }}
+                                    className="text-xs text-cyan-300 hover:text-cyan-200 transition-colors px-2 py-1 rounded hover:bg-cyan-300/20"
+                                    title="AR Preview"
+                                  >
+                                    🎮
+                                  </button>
+                                </>
+                               )}
 
                             <button
                               onClick={(e) => removeFromHistory(index, e)}
