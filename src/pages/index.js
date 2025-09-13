@@ -383,7 +383,7 @@ export default function Home() {
               <p className="text-sm text-white/70 mb-4">Optimized for mobile — design anywhere</p>
               <div className="inline-block glass-card rounded-2xl p-6">
                 <div className="w-32 h-32 bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center rounded-xl mb-4">
-                  <Image src="/file.svg" alt="QR Code" width={64} height={64} className="opacity-70" />
+                  <Image src="/qr_code.png" alt="QR Code" width={64} height={64} className="opacity-70" />
                 </div>
                 <p className="text-sm text-white/70">Scan to open on mobile</p>
               </div>
