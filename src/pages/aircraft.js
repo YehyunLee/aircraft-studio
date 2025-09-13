@@ -37,15 +37,7 @@ export default function Hangar() {
     setSelectedIndex(index === selectedIndex ? null : index);
   }
 
-  function downloadImage(url) {
-    if (!url) return;
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `aircraft-${Date.now()}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
+
 
   function removeFromHistory(index, e) {
     if (e && e.stopPropagation) e.stopPropagation();
@@ -154,14 +146,13 @@ export default function Hangar() {
                    </div>
  
                    <div className="flex flex-col items-end gap-2">
-                     <div className="flex gap-2">
-                       <button onClick={(e) => { e.stopPropagation(); downloadImage(item.imageUrl); }} className="px-3 py-2 rounded-xl bg-white/6 text-sm">Download</button>
-                       {(item.modelUrl || item.modelId) ? (
-                         <button onClick={(e) => onPreviewClick(e, item)} className="px-3 py-2 rounded-xl bg-cyan-400 text-black font-semibold">Preview</button>
-                       ) : (
-                         <span className="px-3 py-2 rounded-xl bg-white/6 text-sm">No 3D</span>
-                       )}
-                      </div>
+                      <div className="flex gap-2">
+                        {(item.modelUrl || item.modelId) ? (
+                          <button onClick={(e) => onPreviewClick(e, item)} className="px-3 py-2 rounded-xl bg-cyan-400 text-black font-semibold">Preview</button>
+                        ) : (
+                          <span className="px-3 py-2 rounded-xl bg-white/6 text-sm">No 3D</span>
+                        )}
+                       </div>
                       <button onClick={(e) => onSimulationClick(e, item)} className="text-xs text-white/60 underline-offset-2 hover:underline">Open in Simulation</button>
 
                     <div className="mt-2">
