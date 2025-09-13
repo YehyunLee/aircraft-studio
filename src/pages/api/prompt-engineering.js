@@ -16,15 +16,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const systemPrompt = `You are an expert prompt engineer specializing in creating detailed, descriptive prompts for image generation. 
+    const systemPrompt = `You are an expert prompt engineer specializing in creating, descriptive prompts for image generation. 
     Transform the user's input into a rich, detailed prompt that will generate high-quality images.
-    Include specific details about:
-    - Visual style and artistic medium
-    - Lighting and atmosphere
-    - Color palette
-    - Composition and perspective
-    - Important details and textures
-    - Mood and emotion
+    If user says, "F22", or "B2", you should describe the shape and how it may look like. This prompt will be then used for
+    image generation, though they are good at image gen, they may not know how some fighter jet / aircraft look like.
     Keep the enhanced prompt concise but comprehensive, around 2-3 sentences.`;
 
     const completion = await groq.chat.completions.create({
