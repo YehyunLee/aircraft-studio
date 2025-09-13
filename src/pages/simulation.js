@@ -34,6 +34,13 @@ export default function Simulation() {
   const cameraRef = useRef();
   const sessionRef = useRef();
   const aircraftRef = useRef();
+  // HUD refs for off-screen indicator
+  const hudRef = useRef();
+  // temporary vectors for projection math
+  const tmpVec = useRef(new THREE.Vector3());
+  const tmpVec2 = useRef(new THREE.Vector3());
+  const tmpVec3 = useRef(new THREE.Vector3());
+  const tmpVec4 = useRef(new THREE.Vector3());
 
   useEffect(() => {
     // Check WebXR support
@@ -235,6 +242,76 @@ export default function Simulation() {
           }
 
           renderer.render(scene, camera);
+
+          // Update HUD indicator for aircraft off-screen
+          try {
+            const hudEl = hudRef.current;
+            const aircraft = aircraftRef.current;
+            if (hudEl && aircraft) {
+              // aircraft world position
+              tmpVec.current.copy(aircraft.position);
+              // Project to camera NDC space
+              tmpVec.current.project(camera);
+
+              const ndcX = tmpVec.current.x; // -1..1
+              const ndcY = tmpVec.current.y; // -1..1
+              const ndcZ = tmpVec.current.z; // negative if behind
+
+              const screenW = renderer.domElement.clientWidth || window.innerWidth;
+              const screenH = renderer.domElement.clientHeight || window.innerHeight;
+
+              // If the aircraft is within NDC cube (-1..1) and in front (z < 1)
+              const onScreen = ndcZ < 1 && ndcX >= -1 && ndcX <= 1 && ndcY >= -1 && ndcY <= 1;
+
+              if (onScreen) {
+                hudEl.style.display = 'none';
+              } else {
+                hudEl.style.display = 'flex';
+
+                // Clamp NDC to slightly inside the edges so the indicator remains visible
+                const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+                const edgeX = clamp(ndcX, -0.98, 0.98);
+                const edgeY = clamp(ndcY, -0.98, 0.98);
+
+                // Convert to screen coords (0..width / 0..height)
+                let screenX = (edgeX * 0.5 + 0.5) * screenW;
+                let screenY = ((-edgeY) * 0.5 + 0.5) * screenH;
+
+                // If behind camera (ndcZ > 1 or original unprojected point was behind), flip indicator to opposite side
+                if (ndcZ > 1) {
+                  // Flip to indicate behind - mirror position
+                  screenX = screenW - screenX;
+                  screenY = screenH - screenY;
+                }
+
+                // Compute angle from center to point for rotation
+                const centerX = screenW / 2;
+                const centerY = screenH / 2;
+                const dx = screenX - centerX;
+                const dy = screenY - centerY;
+                const angle = Math.atan2(dy, dx); // radians
+
+                // Position HUD element near edge with some padding
+                const pad = 18; // px padding from edge
+                // Move the indicator slightly inwards from exact screenX/screenY to avoid overlapping chrome
+                const clampToEdge = (x, min, max) => Math.max(min + pad, Math.min(max - pad, x));
+                const left = clampToEdge(screenX, 0, screenW);
+                const top = clampToEdge(screenY, 0, screenH);
+
+                hudEl.style.left = `${left}px`;
+                hudEl.style.top = `${top}px`;
+                hudEl.style.transform = `translate(-50%, -50%) rotate(${angle}rad)`;
+
+                // Distance label
+                const distanceMeters = Math.max(0, camera.position.distanceTo(aircraft.position));
+                const label = hudEl.querySelector('.hud-distance');
+                if (label) label.textContent = `${distanceMeters.toFixed(1)}m`;
+              }
+            }
+          } catch (e) {
+            // silently ignore HUD errors so AR loop isn't disrupted
+            // console.error('HUD update error', e);
+          }
         }
       });
       
@@ -380,6 +457,11 @@ export default function Simulation() {
       )}
       
       <div id="ar-ui-container">
+        {/* HUD off-screen indicator */}
+        <div ref={hudRef} id="hud-indicator" className="hud-indicator" style={{display: 'none'}}>
+          <div className="hud-arrow">▸</div>
+          <div className="hud-distance">0m</div>
+        </div>
         {isARActive && (
           <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
             <button
@@ -456,6 +538,34 @@ export default function Simulation() {
         }
         .joystick-btn:active {
           background: rgba(255, 255, 255, 0.4);
+        }
+        /* HUD indicator */
+        .hud-indicator {
+          position: fixed;
+          z-index: 60;
+          width: 56px;
+          height: 56px;
+          background: rgba(0,0,0,0.6);
+          border: 1px solid rgba(255,255,255,0.12);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          flex-direction: column;
+          border-radius: 12px;
+          pointer-events: none; /* don't block interactions */
+          transform-origin: 50% 50%;
+          transition: left 0.08s linear, top 0.08s linear, transform 0.12s linear, opacity 0.12s;
+        }
+        .hud-arrow {
+          font-size: 20px;
+          line-height: 1;
+          transform: translateX(-2px);
+        }
+        .hud-distance {
+          font-size: 11px;
+          opacity: 0.9;
         }
       `}</style>
     </div>
