@@ -40,6 +40,7 @@ export default function Simulation() {
   const lastShotTimeRef = useRef(0);
   const SHOT_COOLDOWN = 0.18; // seconds between shots
   const SHOT_SPEED = 8.0; // meters per second
+  const isFiringRef = useRef(false); // hold-to-fire flag
 
   // AR session refs
   const rendererRef = useRef();
@@ -295,6 +296,16 @@ export default function Simulation() {
             // ignore shot update errors
           }
 
+          // Handle hold-to-fire auto firing gated by cooldown
+          try {
+            if (isFiringRef.current) {
+              const nowSec = (performance.now() || Date.now()) / 1000;
+              if (nowSec - (lastShotTimeRef.current || 0) >= SHOT_COOLDOWN) {
+                fireShot();
+              }
+            }
+          } catch (e) {}
+
           renderer.render(scene, camera);
 
           // Update HUD indicator for aircraft off-screen
@@ -399,9 +410,9 @@ export default function Simulation() {
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(aircraft.quaternion).normalize();
 
       // Beam and muzzle parameters
-      const maxBeamLength = 2.6; // meters
+  const maxBeamLength = 2.1; // meters (slightly shorter)
       const beamWidth = 0.035; // meters
-      const startOffset = 0.9; // forward from nose (local Z)
+  const startOffset = 0.6; // forward from nose (closer to jet)
       const slightUp = 0.06; // raise beam slightly
 
       // Compute muzzle position in local space for accuracy, then convert to world
@@ -429,8 +440,9 @@ export default function Simulation() {
           dir.copy(nearest.position).sub(startPos);
           if (dir.lengthSq() > 1e-6) {
             dir.normalize();
-            // Optionally clamp the beam to the target distance so it doesn't overshoot when close
-            beamLength = Math.min(maxBeamLength, nearestDist);
+            // Clamp the beam to the target distance but keep a small minimum so it is visible
+            const minBeamLength = 0.7;
+            beamLength = Math.max(minBeamLength, Math.min(maxBeamLength, nearestDist));
           } else {
             dir.copy(fwd);
           }
@@ -451,7 +463,8 @@ export default function Simulation() {
         uniforms: {
           uLife: { value: 0.0 },
           uTime: { value: now },
-          uColor: { value: new THREE.Color(0.35, 0.9, 1.0) },
+          // player's beam: green tint
+          uColor: { value: new THREE.Color(0.2, 1.0, 0.3) },
         },
         vertexShader: `
           varying vec2 vUv;
@@ -915,8 +928,12 @@ export default function Simulation() {
             <button
               id="shoot-btn"
               className="shoot-btn"
-              onPointerDown={fireShot}
-              onTouchStart={(e) => { e.preventDefault(); fireShot(); }}
+              onPointerDown={() => { isFiringRef.current = true; fireShot(); }}
+              onPointerUp={() => { isFiringRef.current = false; }}
+              onPointerCancel={() => { isFiringRef.current = false; }}
+              onPointerLeave={() => { isFiringRef.current = false; }}
+              onTouchStart={(e) => { e.preventDefault(); isFiringRef.current = true; fireShot(); }}
+              onTouchEnd={(e) => { e.preventDefault(); isFiringRef.current = false; }}
             >
               Fire
             </button>
