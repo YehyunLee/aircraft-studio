@@ -141,8 +141,8 @@ export default function Hangar() {
                        </div>
                      </div>
  
-                     <div className="text-sm truncate">{item.enhancedPrompt || item.originalPrompt || item.prompt}</div>
-                     <div className="text-[11px] text-white/60 mt-2">{item.timestamp ? new Date(item.timestamp).toLocaleString() : item.id}</div>
+                     <div className="text-sm truncate">{item.name || item.enhancedPrompt || item.originalPrompt || item.prompt}</div>
+                     <div className="text-[11px] text-white/60 mt-2">{item.timestamp ? new Date(item.timestamp).toLocaleString() : (item.slugId || item.id)}</div>
                    </div>
  
                    <div className="flex flex-col items-end gap-2">

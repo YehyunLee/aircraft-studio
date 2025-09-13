@@ -131,8 +131,15 @@ export default function Home() {
       if (data.success) {
         const nowId = Date.now();
         const nextIndex = generationHistory.length;
+        // Create a fallback name/id based on timestamp and prompt slug
+        const fallbackName = (promptOverride || enhancedPrompt || prompt).slice(0, 60);
+        const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `aircraft-${nowId}`;
         const newGeneration = {
           id: nowId,
+          // human-friendly name (may be overwritten later if we fetched a dedicated name)
+          name: fallbackName,
+          // slug-safe id for storage/routing
+          slugId: slugify(fallbackName),
           originalPrompt: prompt,
           enhancedPrompt: promptOverride || enhancedPrompt || "",
           imageUrl: data.image,
@@ -253,9 +260,50 @@ export default function Home() {
       const enhanced = await enhancePrompt();
       // Show the enhanced prompt UI as soon as it's available (state already set in enhancePrompt)
       const promptToUse = enhanced || enhancedPrompt || prompt;
+      // Ask the prompt-engineering endpoint for a short aircraft name (1-3 words)
+      let aircraftName = null;
+      let aircraftSlug = null;
+      try {
+        const nameResp = await fetch('/api/prompt-engineering', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            prompt: `Based on this aircraft description: "${promptToUse}", generate a short, catchy name for the aircraft (1-3 words only). Respond with just the name.` 
+          })
+        });
+        const nameData = await nameResp.json();
+        if (nameResp.ok && nameData && nameData.enhancedPrompt) {
+          aircraftName = nameData.enhancedPrompt.trim();
+          // Ensure it's short: limit to first 3 words or 20 characters
+          aircraftName = aircraftName.split(' ').slice(0, 3).join(' ').slice(0, 20);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch aircraft name', e);
+      }
+      // Fallback to a truncated prompt if no name returned
+      if (!aircraftName) aircraftName = (promptToUse || prompt).split('\n')[0].slice(0, 40);
+      const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `aircraft-${Date.now()}`;
+      aircraftSlug = slugify(aircraftName);
       setFlowStep('generating-image');
       const imgRes = await generateImage(promptToUse);
       if (!imgRes) throw new Error('Image generation failed');
+      // Update the newly added history item with the aircraft name and slug
+      try {
+        setGenerationHistory(prev => {
+          const updated = [...prev];
+          const idx = imgRes.index;
+          if (idx >= 0 && idx < updated.length) {
+            updated[idx].name = aircraftName;
+            updated[idx].slugId = aircraftSlug;
+          }
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('generationHistory', JSON.stringify(updated));
+          }
+          return updated;
+        });
+      } catch (e) {
+        console.warn('Failed to update generation history with name', e);
+      }
       setFlowStep('converting-3d');
   const modelUrl = await generate3DModel(imgRes.imageUrl, imgRes.index, true);
       if (!modelUrl) throw new Error('3D conversion failed');
@@ -581,7 +629,7 @@ export default function Home() {
                                )}
                              </div>
                            </div>
-                           <p className="text-sm text-white/90 truncate mb-3">{item.originalPrompt}</p>
+                           <p className="text-sm text-white/90 truncate mb-3">{item.name || item.enhancedPrompt || item.originalPrompt}</p>
                             <div className="flex gap-2">
                               {(item.modelUrl || item.modelId) && (
                                 <>
@@ -589,7 +637,7 @@ export default function Home() {
                                     onClick={async (e) => {
                                       e.stopPropagation();
                                       const url = await resolveHistoryModelUrl(item);
-                                      if (url) setPreviewModel({ src: url, title: (item.originalPrompt || "3D Model") });
+                                      if (url) setPreviewModel({ src: url, title: (item.name || item.originalPrompt || "3D Model") });
                                     }}
                                     className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
                                     title="Quick Preview"
@@ -600,7 +648,7 @@ export default function Home() {
                                     onClick={async (e) => {
                                       e.stopPropagation();
                                       const url = await resolveHistoryModelUrl(item);
-                                      if (url) window.location.href = `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`;
+                                      if (url) window.location.href = `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.name || item.originalPrompt || "3D Model")}`;
                                     }}
                                     className="text-xs text-cyan-300 hover:text-cyan-200 transition-colors px-2 py-1 rounded hover:bg-cyan-300/20"
                                     title="AR Preview"

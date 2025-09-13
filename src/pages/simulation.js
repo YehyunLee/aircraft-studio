@@ -114,8 +114,8 @@ export default function Simulation() {
           if (url) {
             urlCleanup.push(url);
             models.push({
-              id: `home-${index}`,
-              name: item.prompt ? `Generated: ${item.prompt.slice(0, 30)}...` : `Generated Model ${index + 1}`,
+              id: item.slugId || `home-${index}`,
+              name: item.name || item.enhancedPrompt || item.originalPrompt || (item.prompt ? `Generated: ${item.prompt.slice(0, 30)}...` : `Generated Model ${index + 1}`),
               modelPath: url,
               source: 'home'
             });
@@ -125,8 +125,8 @@ export default function Simulation() {
       }
       if (item.modelUrl) {
         models.push({
-          id: `home-${index}`,
-          name: item.prompt ? `Generated: ${item.prompt.slice(0, 30)}...` : `Generated Model ${index + 1}`,
+          id: item.slugId || `home-${index}`,
+          name: item.name || item.enhancedPrompt || item.originalPrompt || (item.prompt ? `Generated: ${item.prompt.slice(0, 30)}...` : `Generated Model ${index + 1}`),
           modelPath: item.modelUrl,
           source: 'home'
         });
@@ -1306,7 +1306,7 @@ export default function Simulation() {
                       >
                         {availableModels.map((model) => (
                           <option key={model.id} value={model.modelPath} className="bg-gray-800">
-                            {model.name} {model.source === 'home' ? '(Generated)' : '(Hangar)'}
+                            {model.name} {model.source === 'home' ? '' : '(Hangar)'}
                           </option>
                         ))}
                       </select>
