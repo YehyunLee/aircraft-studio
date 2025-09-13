@@ -173,7 +173,9 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ 
-          imageData: imageUrl,
+          // Prefer sending an image URL if it is an http(s) asset; otherwise pass data URL/base64
+          imageUrl: (typeof imageUrl === 'string' && imageUrl.startsWith('http')) ? imageUrl : undefined,
+          imageData: (typeof imageUrl === 'string' && !imageUrl.startsWith('http')) ? imageUrl : undefined,
           filename: `aircraft-${Date.now()}.glb`
         }),
       });
@@ -181,17 +183,35 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
+        // Normalize server response to a usable URL
+        let resolvedModelUrl = data.modelUrl;
+        if (!resolvedModelUrl && data.modelDataUrl) {
+          try {
+            // Convert base64 data URL to Blob URL for preview and download
+            const base64 = data.modelDataUrl.split(',')[1];
+            const binary = atob(base64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+            const blob = new Blob([bytes], { type: 'model/gltf-binary' });
+            resolvedModelUrl = URL.createObjectURL(blob);
+          } catch (e) {
+            console.error('Failed to convert model data to Blob URL', e);
+            throw e;
+          }
+        }
+
         // Update history with 3D model
         if (historyIndex !== undefined && historyIndex !== null) {
           setGenerationHistory(prev => {
             const updated = [...prev];
-            updated[historyIndex].modelUrl = data.modelUrl;
+            updated[historyIndex].modelUrl = resolvedModelUrl;
             return updated;
           });
         }
         
         if (imageUrl === currentImageUrl) {
-          setCurrentModelUrl(data.modelUrl);
+          setCurrentModelUrl(resolvedModelUrl);
         }
       } else {
         setError(data.error || "Failed to generate 3D model");

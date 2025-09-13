@@ -1,6 +1,5 @@
 import axios from "axios";
 import FormData from "form-data";
-import fs from "fs";
 import path from "path";
 
 export const config = {
@@ -16,10 +15,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { imageData, filename } = req.body;
+  const { imageData, imageUrl, filename } = req.body;
 
-  if (!imageData) {
-    return res.status(400).json({ error: "Image data is required" });
+  if (!imageData && !imageUrl) {
+    return res.status(400).json({ error: "Either imageData (base64) or imageUrl is required" });
   }
 
   const apiKey = process.env.STABILITY_API_KEY;
@@ -29,22 +28,45 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Convert base64 image to buffer
-    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
-    const imageBuffer = Buffer.from(base64Data, "base64");
-    
-    // Create temporary file for the image
-    const tempDir = path.join(process.cwd(), "temp");
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
+    // Obtain image bytes as Buffer
+    let imageBuffer;
+    let detectedMime = "image/png";
+
+    if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+      // Fetch image from remote URL server-side to avoid large client payloads
+      const imgResp = await axios.get(imageUrl, { responseType: 'arraybuffer', validateStatus: undefined });
+      if (imgResp.status < 200 || imgResp.status >= 300) {
+        throw new Error(`Failed to fetch image from URL (status ${imgResp.status})`);
+      }
+      imageBuffer = Buffer.from(imgResp.data);
+      const contentType = imgResp.headers['content-type'];
+      if (contentType && typeof contentType === 'string') {
+        detectedMime = contentType;
+      }
+    } else if (imageData && typeof imageData === 'string' && imageData.startsWith('data:')) {
+      // Data URL: data:image/png;base64,....
+      const matches = imageData.match(/^data:(.*?);base64,(.*)$/);
+      if (!matches) {
+        throw new Error('Invalid data URL for imageData');
+      }
+      detectedMime = matches[1] || 'image/png';
+      imageBuffer = Buffer.from(matches[2], 'base64');
+    } else if (imageData && typeof imageData === 'string') {
+      // Raw base64 without prefix
+      const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+      imageBuffer = Buffer.from(base64Data, 'base64');
+      detectedMime = 'image/png';
+    } else {
+      throw new Error('No valid image input provided');
     }
-    
-    const tempImagePath = path.join(tempDir, `temp-${Date.now()}.png`);
-    fs.writeFileSync(tempImagePath, imageBuffer);
 
     // Prepare the request
     const formData = new FormData();
-    formData.append("image", fs.createReadStream(tempImagePath));
+    // Send the image as a Buffer; filename and contentType help the API parse it correctly
+    formData.append("image", imageBuffer, {
+      filename: `input-${Date.now()}.${detectedMime.includes('png') ? 'png' : 'jpg'}`,
+      contentType: detectedMime,
+    });
     formData.append("texture_resolution", "2048");
     formData.append("foreground_ratio", "1.3");
     formData.append("remesh", "none");
@@ -67,28 +89,16 @@ export default async function handler(req, res) {
       }
     );
 
-    // Clean up temp image file
-    fs.unlinkSync(tempImagePath);
-
     if (response.status === 200) {
-      // Create directory for GLB files if it doesn't exist
-      const glbDir = path.join(process.cwd(), "public", "models");
-      if (!fs.existsSync(glbDir)) {
-        fs.mkdirSync(glbDir, { recursive: true });
-      }
-
-      // Save GLB file
-      const glbFilename = filename || `aircraft-${Date.now()}.glb`;
-      const glbPath = path.join(glbDir, glbFilename);
-      fs.writeFileSync(glbPath, Buffer.from(response.data));
-
-      // Return the public URL for the GLB file
-      const publicUrl = `/models/${glbFilename}`;
+      // Convert returned ArrayBuffer to base64 data URL so the client can create a Blob URL
+      const glbBuffer = Buffer.from(response.data);
+      const base64 = glbBuffer.toString('base64');
+      const dataUrl = `data:model/gltf-binary;base64,${base64}`;
 
       res.status(200).json({
         success: true,
-        modelUrl: publicUrl,
-        filename: glbFilename,
+        modelDataUrl: dataUrl,
+        filename: filename || `aircraft-${Date.now()}.glb`,
         message: "3D model generated successfully",
       });
     } else {
@@ -96,17 +106,6 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error("Error generating 3D model:", error);
-    
-    // Clean up temp files on error
-    const tempDir = path.join(process.cwd(), "temp");
-    if (fs.existsSync(tempDir)) {
-      const files = fs.readdirSync(tempDir);
-      files.forEach(file => {
-        if (file.startsWith("temp-")) {
-          fs.unlinkSync(path.join(tempDir, file));
-        }
-      });
-    }
 
     res.status(500).json({
       error: "Failed to generate 3D model",
