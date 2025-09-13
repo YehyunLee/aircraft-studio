@@ -32,74 +32,13 @@ export default function Simulation() {
       return next;
     });
   };
-
-  // Shoot from player aircraft: creates a thin plane oriented forward from aircraft
-  const shoot = () => {
-    if (!sceneRef.current || !aircraftRef.current) return;
-    try {
-      const now = (performance.now() || Date.now()) / 1000;
-      // Thin long plane geometry (length x width)
-      const width = 0.04;
-      const length = 2.0;
-      const geo = new THREE.PlaneGeometry(length, width, 1, 1);
-
-      const mat = makeShotMaterial(now);
-
-      // create mesh and position it in front of aircraft
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.renderOrder = 9998;
-      mesh.frustumCulled = false;
-
-      // Position plane so its origin is at aircraft and extends forward along +Z
-      mesh.position.set(0, 0, length / 2 + 0.02);
-      // Rotate so plane faces along local forward (+Z)
-      mesh.rotation.x = 0;
-
-      // Attach to aircraft so it follows transforms
-      aircraftRef.current.add(mesh);
-
-      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat });
-    } catch (err) {
-      console.warn('Shoot failed', err);
-    }
-  };
   const velocity = useRef(new THREE.Vector3());
   const lastFrameTime = useRef(null);
-
-  // Shooting refs and shader factory
+  // Shooting refs
   const shotsRef = useRef([]); // array of { mesh, start, life, material }
   const SHOT_LIFETIME = 0.7; // seconds
-  const makeShotMaterial = (now) => {
-    return new THREE.ShaderMaterial({
-      transparent: true,
-      depthTest: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      uniforms: {
-        uTime: { value: now },
-        uLife: { value: 0 },
-        uColor: { value: new THREE.Color(0x66ffff) },
-      },
-      vertexShader: `
-        varying float vUvX;
-        void main() {
-          vUvX = position.x + 0.5;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float uTime;
-        uniform float uLife;
-        uniform vec3 uColor;
-        varying float vUvX;
-        void main() {
-          float alpha = (1.0 - smoothstep(0.0, 1.0, uLife)) * (1.0 - abs(vUvX - 0.5) * 2.0);
-          alpha = clamp(alpha, 0.0, 1.0);
-          gl_FragColor = vec4(uColor * (0.7 + 0.3 * (1.0 - uLife)), alpha);
-        }
-      `
-    });
-  };
+  const lastShotTimeRef = useRef(0);
+  const SHOT_COOLDOWN = 0.18; // seconds between shots
 
   // AR session refs
   const rendererRef = useRef();
@@ -327,6 +266,30 @@ export default function Simulation() {
             // swallow errors to avoid breaking render loop
           }
 
+          // Update active shots
+          try {
+            const nowSec = (performance.now() || Date.now()) / 1000;
+            const shots = shotsRef.current || [];
+            for (let i = shots.length - 1; i >= 0; --i) {
+              const s = shots[i];
+              const t = (nowSec - s.start) / s.life;
+              if (s.material && s.material.uniforms) {
+                s.material.uniforms.uLife.value = THREE.MathUtils.clamp(t, 0, 1);
+                s.material.uniforms.uTime.value = nowSec;
+              }
+              if (t >= 1.0) {
+                try {
+                  if (s.mesh && s.mesh.parent) s.mesh.parent.remove(s.mesh);
+                  if (s.mesh && s.mesh.geometry) s.mesh.geometry.dispose();
+                  if (s.material) s.material.dispose();
+                } catch (err) {}
+                shots.splice(i, 1);
+              }
+            }
+          } catch (err) {
+            // ignore shot update errors
+          }
+
           renderer.render(scene, camera);
 
           // Update HUD indicator for aircraft off-screen
@@ -411,6 +374,87 @@ export default function Simulation() {
     } catch (err) {
       console.error('AR initialization failed:', err);
       setError('Failed to start AR session: ' + err.message);
+    }
+  };
+
+  // Spawn a shader-based 2D beam from the player's aircraft
+  const fireShot = () => {
+    try {
+      const scene = sceneRef.current;
+      const aircraft = aircraftRef.current;
+      const renderer = rendererRef.current;
+      if (!scene || !aircraft || !renderer) return;
+
+      const now = (performance.now() || Date.now()) / 1000;
+      if (now - (lastShotTimeRef.current || 0) < SHOT_COOLDOWN) return;
+      lastShotTimeRef.current = now;
+
+      // Direction vectors from aircraft orientation
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(aircraft.quaternion).normalize();
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(aircraft.quaternion).normalize();
+
+      const beamLength = 2.6; // meters
+      const beamWidth = 0.035; // meters
+      const startOffset = 0.9; // forward from nose
+      const slightUp = 0.06; // raise beam slightly
+
+      const startPos = new THREE.Vector3().copy(aircraft.position)
+        .addScaledVector(fwd, startOffset)
+        .addScaledVector(up, slightUp);
+
+      const geo = new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1);
+      const mat = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        uniforms: {
+          uLife: { value: 0.0 },
+          uTime: { value: now },
+          uColor: { value: new THREE.Color(0.35, 0.9, 1.0) },
+        },
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          precision highp float;
+          varying vec2 vUv;
+          uniform float uLife;
+          uniform float uTime;
+          uniform vec3 uColor;
+          void main() {
+            float across = abs(vUv.x - 0.5) * 2.0; // 0 center, 1 edges
+            float along = vUv.y; // 0 base, 1 tip
+            float core = smoothstep(1.0, 0.0, across);
+            core *= core;
+            float tip = smoothstep(0.75, 1.0, along) * smoothstep(1.0, 0.75, along);
+            float lifeFade = smoothstep(1.0, 0.0, uLife);
+            float alpha = clamp(core * 0.9 + tip * 0.6, 0.0, 1.0) * lifeFade;
+            vec3 col = uColor * (1.0 + tip * 0.6);
+            float baseFade = smoothstep(0.08, 0.0, along);
+            alpha *= (1.0 - baseFade * 0.6);
+            if (alpha <= 0.001) discard;
+            gl_FragColor = vec4(col, alpha);
+          }
+        `,
+      });
+
+      const mesh = new THREE.Mesh(geo, mat);
+      // Align plane +Y with forward
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), fwd);
+      mesh.quaternion.copy(q);
+      // Shift so base starts at muzzle
+      mesh.position.copy(startPos).addScaledVector(fwd, beamLength * 0.5);
+      mesh.renderOrder = 999;
+      scene.add(mesh);
+
+      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat });
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -679,6 +723,18 @@ export default function Simulation() {
       // ignore
     }
     enemiesRef.current = [];
+    // Cleanup remaining shots
+    try {
+      const shots = shotsRef.current || [];
+      for (const s of shots) {
+        try {
+          if (s.mesh && s.mesh.parent) s.mesh.parent.remove(s.mesh);
+          if (s.mesh && s.mesh.geometry) s.mesh.geometry.dispose();
+          if (s.material) s.material.dispose();
+        } catch (e) {}
+      }
+    } catch (e) {}
+    shotsRef.current = [];
     setIsARActive(false);
     setIsLoadingModel(false);
     setError('');
@@ -783,42 +839,45 @@ export default function Simulation() {
         )}
         
         {isARActive && (
-          <>
-            <div id="joystick-container" className="absolute bottom-6 left-6 w-44 h-44">
-              <div id="up-control" className="joystick-btn top-0 left-1/2 -translate-x-1/2 w-14 h-14"
-                onTouchStart={() => updateInput({ forward: 1 })}
-                onTouchEnd={() => updateInput({ forward: 0 })}
-                onPointerDown={() => updateInput({ forward: 1 })}
-                onPointerUp={() => updateInput({ forward: 0 })}
-              >▲</div>
-              <div id="down-control" className="joystick-btn bottom-0 left-1/2 -translate-x-1/2 w-14 h-14"
-                onTouchStart={() => updateInput({ forward: -1 })}
-                onTouchEnd={() => updateInput({ forward: 0 })}
-                onPointerDown={() => updateInput({ forward: -1 })}
-                onPointerUp={() => updateInput({ forward: 0 })}
-              >▼</div>
-              <div id="left-control" className="joystick-btn top-1/2 -translate-y-1/2 left-0 w-14 h-14"
-                onTouchStart={() => updateInput({ right: -1 })}
-                onTouchEnd={() => updateInput({ right: 0 })}
-                onPointerDown={() => updateInput({ right: -1 })}
-                onPointerUp={() => updateInput({ right: 0 })}
-              >◀</div>
-              <div id="right-control" className="joystick-btn top-1/2 -translate-y-1/2 right-0 w-14 h-14"
-                onTouchStart={() => updateInput({ right: 1 })}
-                onTouchEnd={() => updateInput({ right: 0 })}
-                onPointerDown={() => updateInput({ right: 1 })}
-                onPointerUp={() => updateInput({ right: 0 })}
-              >▶</div>
-            </div>
+          <div id="joystick-container" className="absolute bottom-6 left-4 w-52 h-40">
+            <div id="up-control" className="joystick-btn top-0 left-1/2 -translate-x-1/2 w-14 h-14"
+              onTouchStart={() => updateInput({ forward: 1 })}
+              onTouchEnd={() => updateInput({ forward: 0 })}
+              onPointerDown={() => updateInput({ forward: 1 })}
+              onPointerUp={() => updateInput({ forward: 0 })}
+            >▲</div>
+            <div id="down-control" className="joystick-btn bottom-0 left-1/2 -translate-x-1/2 w-14 h-14"
+              onTouchStart={() => updateInput({ forward: -1 })}
+              onTouchEnd={() => updateInput({ forward: 0 })}
+              onPointerDown={() => updateInput({ forward: -1 })}
+              onPointerUp={() => updateInput({ forward: 0 })}
+            >▼</div>
+            <div id="left-control" className="joystick-btn top-1/2 -translate-y-1/2 left-0 w-14 h-14"
+              onTouchStart={() => updateInput({ right: -1 })}
+              onTouchEnd={() => updateInput({ right: 0 })}
+              onPointerDown={() => updateInput({ right: -1 })}
+              onPointerUp={() => updateInput({ right: 0 })}
+            >◀</div>
+            <div id="right-control" className="joystick-btn top-1/2 -translate-y-1/2 right-0 w-14 h-14"
+              onTouchStart={() => updateInput({ right: 1 })}
+              onTouchEnd={() => updateInput({ right: 0 })}
+              onPointerDown={() => updateInput({ right: 1 })}
+              onPointerUp={() => updateInput({ right: 0 })}
+            >▶</div>
+          </div>
+        )}
 
+        {isARActive && (
+          <div className="absolute bottom-6 right-5">
             <button
-              onTouchStart={(e) => { e.preventDefault(); shoot(); }}
-              onPointerDown={(e) => { e.preventDefault(); shoot(); }}
-              className="shoot-btn absolute bottom-8 right-6 w-20 h-20 rounded-full flex items-center justify-center text-black font-bold"
+              id="shoot-btn"
+              className="shoot-btn"
+              onPointerDown={fireShot}
+              onTouchStart={(e) => { e.preventDefault(); fireShot(); }}
             >
               Fire
             </button>
-          </>
+          </div>
         )}
       </div>
 
@@ -836,27 +895,36 @@ export default function Simulation() {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 2rem;
+          font-size: 1.6rem;
           color: white;
           user-select: none;
           touch-action: none; /* ensure pointer/touch events fire immediately */
           cursor: pointer;
+          z-index: 50;
         }
         .joystick-btn:active {
           background: rgba(255, 255, 255, 0.4);
         }
-        /* Shoot button */
         .shoot-btn {
-          background: linear-gradient(180deg, #ffd166, #ff9f1c);
-          border: 2px solid rgba(0,0,0,0.12);
-          box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+          width: 70px;
+          height: 70px;
+          border-radius: 9999px;
+          background: rgba(59, 130, 246, 0.85);
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          color: white;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          box-shadow: 0 4px 18px rgba(59, 130, 246, 0.45);
+          backdrop-filter: blur(6px);
+          cursor: pointer;
           user-select: none;
-          -webkit-user-select: none;
-          touch-action: manipulation;
+          touch-action: none;
+          z-index: 55;
         }
         .shoot-btn:active {
-          transform: scale(0.96);
-          filter: brightness(0.95);
+          transform: scale(0.98);
+          background: rgba(59, 130, 246, 1);
         }
         /* HUD indicator */
         .hud-indicator {
@@ -886,8 +954,6 @@ export default function Simulation() {
           font-size: 11px;
           opacity: 0.9;
         }
-        /* ensure overlay controls don't get hidden behind WebXR dom overlay chrome */
-        #ar-ui-container { position: relative; z-index: 1000; }
       `}</style>
     </div>
   );
