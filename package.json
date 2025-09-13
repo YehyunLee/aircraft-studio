@@ -9,13 +9,17 @@
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.9.0",
+    "@react-three/drei": "^10.7.6",
+    "@react-three/fiber": "^9.3.0",
+    "@react-three/xr": "^6.6.26",
     "axios": "^1.12.1",
     "form-data": "^4.0.4",
     "groq-sdk": "^0.32.0",
     "next": "15.5.3",
     "node-fetch": "^3.3.2",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "three": "^0.180.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
