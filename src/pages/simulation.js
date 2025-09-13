@@ -16,8 +16,6 @@ export default function Simulation() {
   const cameraRef = useRef();
   const sessionRef = useRef();
   const aircraftRef = useRef();
-  const reticleRef = useRef();
-  const hitTestSourceRef = useRef();
 
   useEffect(() => {
     // Check WebXR support
@@ -73,6 +71,10 @@ export default function Simulation() {
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
+      
+      // Set reference space type on renderer BEFORE session
+      renderer.xr.setReferenceSpaceType('local');
+      
       rendererRef.current = renderer;
 
       // Create scene
@@ -91,57 +93,48 @@ export default function Simulation() {
       directionalLight.position.set(1, 1, 1).normalize();
       scene.add(directionalLight);
 
-      // Create reticle (placement indicator)
-      const reticleGeometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
-      const reticleMaterial = new THREE.MeshBasicMaterial();
-      const reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
-      reticle.matrixAutoUpdate = false;
-      reticle.visible = false;
-      scene.add(reticle);
-      reticleRef.current = reticle;
-
       // Request AR session
-      const session = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test']
-      });
+      const sessionInit = {
+        requiredFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body }
+      };
+      
+      const session = await navigator.xr.requestSession('immersive-ar', sessionInit);
       sessionRef.current = session;
 
       await renderer.xr.setSession(session);
 
-      // Set up hit testing
-      const referenceSpace = await session.requestReferenceSpace('viewer');
-      hitTestSourceRef.current = await session.requestHitTestSource({ space: referenceSpace });
-
       // Handle session end
       session.addEventListener('end', () => {
         setIsARActive(false);
-        hitTestSourceRef.current = null;
         sessionRef.current = null;
       });
 
-      // Handle touch/tap for placing aircraft
-      const controller = renderer.xr.getController(0);
-      controller.addEventListener('select', onSelect);
-      scene.add(controller);
+      // Request reference space AFTER session
+      session.requestReferenceSpace('local').then((refSpace) => {
+        // Simple approach: place aircraft at fixed position
+        if (selectedModel) {
+          placeAircraft();
+        }
 
-      // Append to container
-      containerRef.current.appendChild(renderer.domElement);
+        // Append to container
+        containerRef.current.appendChild(renderer.domElement);
 
-      // Start render loop
-      renderer.setAnimationLoop(render);
-      
-      setIsARActive(true);
-      setError('');
+        // Start render loop
+        renderer.setAnimationLoop(() => {
+          renderer.render(scene, camera);
+        });
+        
+        setIsARActive(true);
+        setError('');
+      }).catch((err) => {
+        console.error('Failed to get reference space:', err);
+        setError('Failed to initialize AR reference space: ' + err.message);
+      });
 
     } catch (err) {
       console.error('AR initialization failed:', err);
       setError('Failed to start AR session: ' + err.message);
-    }
-  };
-
-  const onSelect = () => {
-    if (reticleRef.current && reticleRef.current.visible && selectedModel && !aircraftRef.current) {
-      placeAircraft();
     }
   };
 
@@ -154,16 +147,13 @@ export default function Simulation() {
       loader.load(selectedModel, (gltf) => {
         const aircraft = gltf.scene;
         
-        // Scale and position the aircraft
+        // Scale and position the aircraft at a fixed position
         aircraft.scale.setScalar(0.1); // Adjust scale as needed
-        aircraft.position.setFromMatrixPosition(reticleRef.current.matrix);
-        aircraft.quaternion.setFromRotationMatrix(reticleRef.current.matrix);
+        aircraft.position.set(0, 0, -1); // Place 1 meter in front of user
         
         sceneRef.current.add(aircraft);
         aircraftRef.current = aircraft;
         
-        // Hide reticle after placing
-        reticleRef.current.visible = false;
       }, undefined, (error) => {
         console.error('Error loading aircraft model:', error);
         setError('Failed to load aircraft model');
@@ -172,24 +162,6 @@ export default function Simulation() {
       console.error('Error placing aircraft:', err);
       setError('Failed to place aircraft');
     }
-  };
-
-  const render = (timestamp, frame) => {
-    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
-
-    if (frame && hitTestSourceRef.current && !aircraftRef.current) {
-      const hitTestResults = frame.getHitTestResults(hitTestSourceRef.current);
-      
-      if (hitTestResults.length > 0) {
-        const hit = hitTestResults[0];
-        reticleRef.current.visible = true;
-        reticleRef.current.matrix.fromArray(hit.getPose(rendererRef.current.xr.getReferenceSpace()).transform.matrix);
-      } else {
-        reticleRef.current.visible = false;
-      }
-    }
-
-    rendererRef.current.render(sceneRef.current, cameraRef.current);
   };
 
   const exitAR = () => {
@@ -202,8 +174,6 @@ export default function Simulation() {
     }
     // Reset refs
     aircraftRef.current = null;
-    reticleRef.current = null;
-    hitTestSourceRef.current = null;
     setIsARActive(false);
   };
 
@@ -248,7 +218,7 @@ export default function Simulation() {
                     </button>
                     
                     <p className="text-xs text-white/60">
-                      Tap on a surface to place your aircraft in AR
+                      Aircraft will appear 1 meter in front of you in AR
                     </p>
                   </>
                 ) : (
@@ -286,7 +256,7 @@ export default function Simulation() {
           
           {!aircraftRef.current && (
             <div className="px-4 py-2 bg-black/60 backdrop-blur rounded-xl text-white text-sm">
-              Look for a surface and tap to place aircraft
+              Aircraft loading...
             </div>
           )}
         </div>
