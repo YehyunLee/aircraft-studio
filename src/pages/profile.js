@@ -1,7 +1,6 @@
-import { withPageAuthRequired, useUser } from "@auth0/nextjs-auth0";
+import { withPageAuthRequired, getSession } from "@auth0/nextjs-auth0";
 
-function ProfilePage() {
-  const { user } = useUser();
+function ProfilePage({ user }) {
 
   return (
     <div className="min-h-dvh bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white font-sans p-6 sm:p-10">
@@ -32,3 +31,10 @@ function ProfilePage() {
 }
 
 export default withPageAuthRequired(ProfilePage);
+
+export const getServerSideProps = withPageAuthRequired({
+  async getServerSideProps(ctx) {
+    const { user } = await getSession(ctx.req, ctx.res);
+    return { props: { user } };
+  },
+});
