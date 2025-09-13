@@ -457,13 +457,18 @@ export default function Simulation() {
                   sceneRef.current.add(enemyObj);
                   // Make a small bright marker to ensure visibility even if model materials are dark
                   try {
-                    const debugMarker = new THREE.Mesh(
-                      new THREE.SphereGeometry(0.06, 8, 6),
-                      new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-                    );
-                    debugMarker.position.set(0, 0.12, 0);
-                    // If enemyObj is a Group, add marker as child so it moves with the enemy
-                    if (enemyObj.add) enemyObj.add(debugMarker);
+                    // Create a small red triangular marker (cone with 3 radial segments) that points down
+                    const coneGeo = new THREE.ConeGeometry(0.07, 0.12, 3);
+                    const coneMat = new THREE.MeshBasicMaterial({ color: 0xff4444 });
+                    const enemyMarker = new THREE.Mesh(coneGeo, coneMat);
+                    // Point the cone downwards so the flat triangle faces the camera when above the jet
+                    enemyMarker.rotation.x = Math.PI; // flip so apex points down
+                    enemyMarker.position.set(0, 0.22, 0);
+                    enemyMarker.renderOrder = 9999;
+                    enemyMarker.frustumCulled = false;
+                    enemyMarker.userData.isEnemyMarker = true;
+                    // Add as child so it follows the enemy's transform
+                    if (enemyObj.add) enemyObj.add(enemyMarker);
                   } catch (markerErr) {
                     // ignore marker errors
                   }
