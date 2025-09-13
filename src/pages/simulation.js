@@ -14,7 +14,19 @@ export default function Simulation() {
     forward: 0,
     right: 0,
   });
+  // inputRef used by the XR render loop so it always sees latest user input
+  const inputRef = useRef({ forward: 0, right: 0 });
+
+  // Helper to update both React state and the inputRef used in the loop
+  const updateInput = (partial) => {
+    setInput((i) => {
+      const next = { ...i, ...partial };
+      inputRef.current = next;
+      return next;
+    });
+  };
   const velocity = useRef(new THREE.Vector3());
+  const lastFrameTime = useRef(null);
 
   // AR session refs
   const rendererRef = useRef();
@@ -122,7 +134,13 @@ export default function Simulation() {
       // Start XR-driven render loop
       renderer.setAnimationLoop((timestamp, frame) => {
         if (!frame) return;
-
+        // compute delta from timestamp for smoother frame-rate-independent motion
+        const now = timestamp || performance.now();
+        let delta = 0.016;
+        if (lastFrameTime.current != null) {
+          delta = Math.min(0.05, (now - lastFrameTime.current) / 1000);
+        }
+        lastFrameTime.current = now;
         const pose = frame.getViewerPose(refSpace);
         if (pose) {
           const view = pose.views[0];
@@ -136,7 +154,7 @@ export default function Simulation() {
           // Update aircraft movement
           if (aircraftRef.current) {
             const aircraft = aircraftRef.current;
-            const delta = 0.016; // Assuming 60fps
+            // delta is computed above from actual frame timestamps
 
             // --- Forward speed: use a small negative z (convention: negative z == forward)
             // Start from current forward velocity and smoothly approach a base cruise speed.
@@ -145,14 +163,16 @@ export default function Simulation() {
             velocity.current.z = THREE.MathUtils.lerp(velocity.current.z || 0, baseForward, 0.08);
 
             // Joystick input adjustments
+            // Use inputRef so the animation loop sees the latest input from event handlers
+            const curInput = inputRef.current || { forward: 0, right: 0 };
             // Up/down on the joystick will slightly change forward speed (push forward => faster)
-            if (input.forward) {
-              // input.forward is 1 (up) or -1 (down). Positive should increase forward speed (more negative)
-              velocity.current.z += -input.forward * 0.6 * delta; // small change per frame
+            if (curInput.forward) {
+              // curInput.forward is 1 (up) or -1 (down). Positive should increase forward speed (more negative)
+              velocity.current.z += -curInput.forward * 0.6 * delta; // small change per frame
             }
 
             // Lateral velocity for small strafing / inertial feeling
-            velocity.current.x = THREE.MathUtils.lerp(velocity.current.x || 0, (input.right || 0) * 0.6, 0.12);
+            velocity.current.x = THREE.MathUtils.lerp(velocity.current.x || 0, (curInput.right || 0) * 0.6, 0.12);
             // vertical velocity is mostly controlled by pitch; keep it small
             velocity.current.y = THREE.MathUtils.lerp(velocity.current.y || 0, 0, 0.12);
 
@@ -163,15 +183,16 @@ export default function Simulation() {
 
             // --- Rotation: use joystick input directly to pivot (yaw) and bank (roll)
             // This makes a left/right joystick tap cause an immediate pivot into the turn
-            const maxYawRate = 1.5; // radians per second (tuned)
-            const yaw = (input.right || 0) * -maxYawRate * delta; // negative sign for expected handedness
-            const bank = (input.right || 0) * -0.45; // target roll angle in radians
+            const maxYawRate = 2.0; // radians per second (tuned up for responsiveness)
+            const yaw = (curInput.right || 0) * -maxYawRate * delta; // negative sign for expected handedness
+            const bank = (curInput.right || 0) * -0.45; // target roll angle in radians
             const pitch = -velocity.current.y * 0.35; // small pitch from vertical velocity
 
             // Apply yaw incrementally
             if (Math.abs(yaw) > 1e-6) {
               const qYaw = new THREE.Quaternion();
               qYaw.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+              // Pre-multiply so yaw applies in world Y, then slerp to smooth sudden changes
               aircraft.quaternion.multiply(qYaw);
             }
 
@@ -384,20 +405,28 @@ export default function Simulation() {
         {isARActive && (
           <div id="joystick-container" className="absolute bottom-8 left-1/2 -translate-x-1/2 w-64 h-48">
             <div id="up-control" className="joystick-btn top-0 left-1/2 -translate-x-1/2 w-16 h-16"
-              onTouchStart={() => setInput(i => ({...i, forward: 1}))}
-              onTouchEnd={() => setInput(i => ({...i, forward: 0}))}
+              onTouchStart={() => updateInput({ forward: 1 })}
+              onTouchEnd={() => updateInput({ forward: 0 })}
+              onPointerDown={() => updateInput({ forward: 1 })}
+              onPointerUp={() => updateInput({ forward: 0 })}
             >▲</div>
             <div id="down-control" className="joystick-btn bottom-0 left-1/2 -translate-x-1/2 w-16 h-16"
-              onTouchStart={() => setInput(i => ({...i, forward: -1}))}
-              onTouchEnd={() => setInput(i => ({...i, forward: 0}))}
+              onTouchStart={() => updateInput({ forward: -1 })}
+              onTouchEnd={() => updateInput({ forward: 0 })}
+              onPointerDown={() => updateInput({ forward: -1 })}
+              onPointerUp={() => updateInput({ forward: 0 })}
             >▼</div>
             <div id="left-control" className="joystick-btn top-1/2 -translate-y-1/2 left-0 w-16 h-16"
-              onTouchStart={() => setInput(i => ({...i, right: -1}))}
-              onTouchEnd={() => setInput(i => ({...i, right: 0}))}
+              onTouchStart={() => updateInput({ right: -1 })}
+              onTouchEnd={() => updateInput({ right: 0 })}
+              onPointerDown={() => updateInput({ right: -1 })}
+              onPointerUp={() => updateInput({ right: 0 })}
             >◀</div>
             <div id="right-control" className="joystick-btn top-1/2 -translate-y-1/2 right-0 w-16 h-16"
-              onTouchStart={() => setInput(i => ({...i, right: 1}))}
-              onTouchEnd={() => setInput(i => ({...i, right: 0}))}
+              onTouchStart={() => updateInput({ right: 1 })}
+              onTouchEnd={() => updateInput({ right: 0 })}
+              onPointerDown={() => updateInput({ right: 1 })}
+              onPointerUp={() => updateInput({ right: 0 })}
             >▶</div>
           </div>
         )}
@@ -420,6 +449,8 @@ export default function Simulation() {
           font-size: 2rem;
           color: white;
           user-select: none;
+          touch-action: none; /* ensure pointer/touch events fire immediately */
+          cursor: pointer;
         }
         .joystick-btn:active {
           background: rgba(255, 255, 255, 0.4);
