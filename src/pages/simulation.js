@@ -138,40 +138,63 @@ export default function Simulation() {
             const aircraft = aircraftRef.current;
             const delta = 0.016; // Assuming 60fps
 
-            // Constant forward velocity
-            velocity.current.z = -1;
+            // --- Forward speed: use a small negative z (convention: negative z == forward)
+            // Start from current forward velocity and smoothly approach a base cruise speed.
+            const baseForward = -0.75; // tuned to be slower than previous value
+            // Smoothly lerp toward base forward speed so changes are not instant
+            velocity.current.z = THREE.MathUtils.lerp(velocity.current.z || 0, baseForward, 0.08);
 
-            // Apply joystick input to velocity
-            const acceleration = new THREE.Vector3(
-              input.right * 2 * delta,
-              -input.forward * 2 * delta,
-              0
-            );
+            // Joystick input adjustments
+            // Up/down on the joystick will slightly change forward speed (push forward => faster)
+            if (input.forward) {
+              // input.forward is 1 (up) or -1 (down). Positive should increase forward speed (more negative)
+              velocity.current.z += -input.forward * 0.6 * delta; // small change per frame
+            }
 
-            velocity.current.add(acceleration);
+            // Lateral velocity for small strafing / inertial feeling
+            velocity.current.x = THREE.MathUtils.lerp(velocity.current.x || 0, (input.right || 0) * 0.6, 0.12);
+            // vertical velocity is mostly controlled by pitch; keep it small
+            velocity.current.y = THREE.MathUtils.lerp(velocity.current.y || 0, 0, 0.12);
 
-            // Clamp velocity
-            velocity.current.x = THREE.MathUtils.clamp(velocity.current.x, -0.5, 0.5);
-            velocity.current.y = THREE.MathUtils.clamp(velocity.current.y, -0.5, 0.5);
+            // Clamp lateral/vertical speed so movement doesn't blow up
+            velocity.current.x = THREE.MathUtils.clamp(velocity.current.x, -0.9, 0.9);
+            velocity.current.y = THREE.MathUtils.clamp(velocity.current.y, -0.6, 0.6);
+            velocity.current.z = THREE.MathUtils.clamp(velocity.current.z, -1.5, -0.3);
 
-            // Apply rotation based on input
-            const q = new THREE.Quaternion();
-            const euler = new THREE.Euler();
-            euler.set(
-              -velocity.current.y * 0.5,
-              -velocity.current.x * 0.5,
-              -velocity.current.x * 0.2
-            );
-            q.setFromEuler(euler);
-            aircraft.quaternion.multiply(q);
+            // --- Rotation: use joystick input directly to pivot (yaw) and bank (roll)
+            // This makes a left/right joystick tap cause an immediate pivot into the turn
+            const maxYawRate = 1.5; // radians per second (tuned)
+            const yaw = (input.right || 0) * -maxYawRate * delta; // negative sign for expected handedness
+            const bank = (input.right || 0) * -0.45; // target roll angle in radians
+            const pitch = -velocity.current.y * 0.35; // small pitch from vertical velocity
 
-            // Apply forward movement
-            const forward = new THREE.Vector3(0, 0, -1);
+            // Apply yaw incrementally
+            if (Math.abs(yaw) > 1e-6) {
+              const qYaw = new THREE.Quaternion();
+              qYaw.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+              aircraft.quaternion.multiply(qYaw);
+            }
+
+            // Apply a small, smooth roll/pitch by constructing a local euler and slerping
+            const targetEuler = new THREE.Euler(pitch, 0, bank, 'XYZ');
+            const targetQ = new THREE.Quaternion().setFromEuler(targetEuler);
+
+            // Combine current orientation's yaw with target local pitch/roll
+            // Extract current yaw from aircraft quaternion
+            const currentYaw = new THREE.Euler().setFromQuaternion(aircraft.quaternion, 'YXZ').y;
+            const combinedEuler = new THREE.Euler(pitch, currentYaw, bank, 'YXZ');
+            const combinedQ = new THREE.Quaternion().setFromEuler(combinedEuler);
+
+            // Smoothly slerp toward combined orientation so the bank/pitch transition looks natural
+            aircraft.quaternion.slerp(combinedQ, 0.12);
+
+            // --- Movement: move along aircraft's local forward (convention here: local +Z is forward)
+            const forward = new THREE.Vector3(0, 0, 1);
             forward.applyQuaternion(aircraft.quaternion);
-            forward.multiplyScalar(velocity.current.z * delta * 2);
+            forward.multiplyScalar(velocity.current.z * delta);
             aircraft.position.add(forward);
 
-            // Apply sideways and vertical movement
+            // Apply small sideways (strafing) and vertical movement for feel
             const sideways = new THREE.Vector3(1, 0, 0);
             sideways.applyQuaternion(aircraft.quaternion);
             sideways.multiplyScalar(velocity.current.x * delta);
@@ -182,8 +205,10 @@ export default function Simulation() {
             up.multiplyScalar(velocity.current.y * delta);
             aircraft.position.add(up);
 
-            // Dampen velocity
-            velocity.current.multiplyScalar(0.95);
+            // Slight damping to avoid runaway values
+            velocity.current.x *= 0.96;
+            velocity.current.y *= 0.96;
+            velocity.current.z = THREE.MathUtils.lerp(velocity.current.z, baseForward, 0.02);
           }
 
           renderer.render(scene, camera);
