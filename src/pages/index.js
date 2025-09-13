@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import Head from "next/head";
 import Script from "next/script";
+import { saveModelBlob, getModelObjectURL } from "../lib/idbModels";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
@@ -128,6 +129,7 @@ export default function Home() {
           enhancedPrompt: enhancedPrompt,
           imageUrl: data.image,
           modelUrl: null,
+          modelId: null,
           timestamp: new Date().toISOString()
         };
         
@@ -185,6 +187,7 @@ export default function Home() {
       if (data.success) {
         // Normalize server response to a usable URL
         let resolvedModelUrl = data.modelUrl;
+        let persistedId = null;
         if (!resolvedModelUrl && data.modelDataUrl) {
           try {
             // Convert base64 data URL to Blob URL for preview and download
@@ -195,6 +198,14 @@ export default function Home() {
             for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
             const blob = new Blob([bytes], { type: 'model/gltf-binary' });
             resolvedModelUrl = URL.createObjectURL(blob);
+            // Persist in IndexedDB so it survives refreshes
+            try {
+              const id = data.filename || `aircraft-${Date.now()}.glb`;
+              await saveModelBlob(id, blob);
+              persistedId = id;
+            } catch (persistErr) {
+              console.warn('Unable to persist GLB to IndexedDB', persistErr);
+            }
           } catch (e) {
             console.error('Failed to convert model data to Blob URL', e);
             throw e;
@@ -206,6 +217,7 @@ export default function Home() {
           setGenerationHistory(prev => {
             const updated = [...prev];
             updated[historyIndex].modelUrl = resolvedModelUrl;
+            if (persistedId) updated[historyIndex].modelId = persistedId;
             return updated;
           });
         }
@@ -270,6 +282,21 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to remove history item', err);
     }
+  };
+
+  // Resolve a usable model URL for a history item (prefers explicit URL, falls back to IndexedDB)
+  const resolveHistoryModelUrl = async (item) => {
+    if (!item) return null;
+    if (item.modelUrl) return item.modelUrl;
+    if (item.modelId) {
+      try {
+        const url = await getModelObjectURL(item.modelId);
+        if (url) return url;
+      } catch (e) {
+        console.warn('Failed to resolve model from IndexedDB', e);
+      }
+    }
+    return null;
   };
 
   const startNewGeneration = () => {
@@ -570,7 +597,7 @@ export default function Home() {
                              <p className="text-sm text-white/60">#{index + 1}</p>
                              <div className="flex gap-2">
                                <span className="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded-full font-medium">Image</span>
-                               {item.modelUrl && (
+                               {(item.modelUrl || item.modelId) && (
                                  <span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-1 rounded-full font-medium">3D</span>
                                )}
                              </div>
@@ -587,30 +614,35 @@ export default function Home() {
                              >
                                💾
                              </button>
-                             {item.modelUrl && (
+                             {(item.modelUrl || item.modelId) && (
                                <>
                                  <button
-                                   onClick={(e) => {
+                                   onClick={async (e) => {
                                      e.stopPropagation();
-                                     setPreviewModel({ src: item.modelUrl, title: (item.originalPrompt || "3D Model") });
+                                     const url = await resolveHistoryModelUrl(item);
+                                     if (url) setPreviewModel({ src: url, title: (item.originalPrompt || "3D Model") });
                                    }}
                                    className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
                                    title="Quick Preview"
                                  >
                                    👁
                                  </button>
-                                 <Link
-                                   href={`/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`}
-                                   onClick={(e) => e.stopPropagation()}
+                                 <button
+                                   onClick={async (e) => {
+                                     e.stopPropagation();
+                                     const url = await resolveHistoryModelUrl(item);
+                                     if (url) window.location.href = `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`;
+                                   }}
                                    className="text-xs text-cyan-300 hover:text-cyan-200 transition-colors px-2 py-1 rounded hover:bg-cyan-300/20"
                                    title="AR Preview"
                                  >
                                    🎮
-                                 </Link>
+                                 </button>
                                  <button
-                                   onClick={(e) => {
+                                   onClick={async (e) => {
                                      e.stopPropagation();
-                                     download3DModel(item.modelUrl);
+                                     const url = await resolveHistoryModelUrl(item);
+                                     if (url) download3DModel(url);
                                    }}
                                    className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
                                    title="Download 3D Model"
