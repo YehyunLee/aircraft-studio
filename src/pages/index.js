@@ -215,6 +215,43 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
+  const removeFromHistory = (index, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    try {
+      // Update generation history and persist
+      setGenerationHistory(prev => {
+        const next = [...prev];
+        if (index >= 0 && index < next.length) {
+          next.splice(index, 1);
+        }
+        if (typeof window !== 'undefined') {
+          if (next.length > 0) {
+            localStorage.setItem('generationHistory', JSON.stringify(next));
+          } else {
+            localStorage.removeItem('generationHistory');
+          }
+        }
+        return next;
+      });
+
+      // Adjust selection and clear current display when needed
+      if (selectedHistoryIndex === null) {
+        // nothing
+      } else if (selectedHistoryIndex === index) {
+        setSelectedHistoryIndex(null);
+        setPrompt("");
+        setEnhancedPrompt("");
+        setCurrentImageUrl("");
+        setCurrentModelUrl("");
+        setError("");
+      } else if (selectedHistoryIndex > index) {
+        setSelectedHistoryIndex(selectedHistoryIndex - 1);
+      }
+    } catch (err) {
+      console.error('Failed to remove history item', err);
+    }
+  };
+
   const startNewGeneration = () => {
     setPrompt("");
     setEnhancedPrompt("");
@@ -492,93 +529,89 @@ export default function Home() {
               <section className="glass-card rounded-2xl p-6">
                 <h3 className="text-lg font-semibold mb-4">Generation History</h3>
                 <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {generationHistory.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className={`p-4 rounded-xl bg-white/5 border transition-all duration-200 cursor-pointer hover:bg-white/10 ${
-                        selectedHistoryIndex === index ? 'border-cyan-400 bg-cyan-400/5' : 'border-white/10'
-                      }`}
-                      onClick={() => selectFromHistory(index)}
-                    >
-                      <div className="flex gap-4">
-                        <div className="w-20 h-20 rounded-lg overflow-hidden bg-white/10 flex-shrink-0 border border-white/10">
-                          <img
-                            src={item.imageUrl}
-                            alt={`Generation ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <p className="text-sm text-white/60">#{index + 1}</p>
-                            <div className="flex gap-2">
-                              <span className="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded-full font-medium">Image</span>
-                              {item.modelUrl && (
-                                <span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-1 rounded-full font-medium">3D</span>
+                           {generationHistory.map((item, index) => (
+                     <div
+                       key={item.id}
+                       className={`p-4 rounded-xl bg-white/5 border transition-all duration-200 cursor-pointer hover:bg-white/10 ${
+                         selectedHistoryIndex === index ? 'border-cyan-400 bg-cyan-400/5' : 'border-white/10'
+                       }`}
+                       onClick={() => selectFromHistory(index)}
+                     >
+                       <div className="flex gap-4">
+                         <div className="w-20 h-20 rounded-lg overflow-hidden bg-white/10 flex-shrink-0 border border-white/10">
+                           <img
+                             src={item.imageUrl}
+                             alt={`Generation ${index + 1}`}
+                             className="w-full h-full object-cover"
+                           />
+                         </div>
+                         <div className="flex-1 min-w-0">
+                           <div className="flex items-center gap-2 mb-2">
+                             <p className="text-sm text-white/60">#{index + 1}</p>
+                             <div className="flex gap-2">
+                               <span className="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded-full font-medium">Image</span>
+                               {item.modelUrl && (
+                                 <span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-1 rounded-full font-medium">3D</span>
+                               )}
+                             </div>
+                           </div>
+                           <p className="text-sm text-white/90 truncate mb-3">{item.originalPrompt}</p>
+                           <div className="flex gap-2">
+                             <button
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 downloadImage(item.imageUrl);
+                               }}
+                               className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
+                               title="Download Image"
+                             >
+                               💾
+                             </button>
+                             {item.modelUrl && (
+                               <>
+                                 <button
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     setPreviewModel({ src: item.modelUrl, title: (item.originalPrompt || "3D Model") });
+                                   }}
+                                   className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
+                                   title="Quick Preview"
+                                 >
+                                   👁
+                                 </button>
+                                 <Link
+                                   href={`/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`}
+                                   onClick={(e) => e.stopPropagation()}
+                                   className="text-xs text-cyan-300 hover:text-cyan-200 transition-colors px-2 py-1 rounded hover:bg-cyan-300/20"
+                                   title="AR Preview"
+                                 >
+                                   🎮
+                                 </Link>
+                                 <button
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     download3DModel(item.modelUrl);
+                                   }}
+                                   className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
+                                   title="Download 3D Model"
+                                 >
+                                   📦
+                                 </button>
+                               </>
                               )}
-                            </div>
-                          </div>
-                          <p className="text-sm text-white/90 truncate mb-3">{item.originalPrompt}</p>
-                          <div className="flex gap-2">
+
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                downloadImage(item.imageUrl);
-                              }}
-                              className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
-                              title="Download Image"
+                              onClick={(e) => removeFromHistory(index, e)}
+                              className="text-xs text-red-300 hover:text-red-200 transition-colors px-2 py-1 rounded hover:bg-red-500/10"
+                              title="Remove"
                             >
-                              💾
+                              🗑
                             </button>
-                            {item.modelUrl ? (
-                              <>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPreviewModel({ src: item.modelUrl, title: (item.originalPrompt || "3D Model") });
-                                  }}
-                                  className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
-                                  title="Quick Preview"
-                                >
-                                  👁
-                                </button>
-                                <Link
-                                  href={`/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-xs text-cyan-300 hover:text-cyan-200 transition-colors px-2 py-1 rounded hover:bg-cyan-300/20"
-                                  title="AR Preview"
-                                >
-                                  🎮
-                                </Link>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    download3DModel(item.modelUrl);
-                                  }}
-                                  className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10"
-                                  title="Download 3D Model"
-                                >
-                                  📦
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  generate3DModel(item.imageUrl, index);
-                                }}
-                                disabled={generating3D}
-                                className="text-xs text-white/60 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/10 disabled:opacity-30"
-                                title="Generate 3D"
-                              >
-                                🎯
-                              </button>
-                            )}
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                         </div>
+                       </div>
+                     </div>
+                   ))}
                 </div>
               </section>
             )}
