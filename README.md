@@ -1,40 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# Aircraft Studio
 
-## Getting Started
+Design, engineer, and simulate aircraft — mobile-first.
 
-First, run the development server:
+Overview
+--------
+Aircraft Studio is a mobile-focused studio for designing and testing aircraft. The app helps users create or select aircraft, iterate quickly with AI-assisted image generation, and convert concept images into 3D models for review and AR simulation.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Key user flows
+--------------
+- Create or select an existing aircraft.
+- Create using text prompts with Groq to assist engineering decisions.
+- Generate concept imagery rapidly with Fireworks Flux 1 and iterate visually.
+- Convert images to 3D (`.glb`) using Spar 3D for previews and quick play.
+- Review, refine, and finalize designs.
+- Enter AR simulation to pilot, move, and shoot in friendly matches. Record stats and view leaderboards after runs.
+- Provide a QR code for quick mobile access.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Technologies (planned/current)
+------------------------------
+- Groq — AI text support for engineering prompts
+- Fireworks Flux 1 — fast image generation
+- Spar 3D — image-to-3D (`.glb`) conversion
+- Next.js — frontend framework (this repository)
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+Design & UX
+-----------
+- Mobile-first: UI and interactions are optimized for phones and touch.
+- Studio vibe: clean, tech-forward visuals and quick iteration paths.
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+Current focus
+-------------
+- Building a mobile-first home page and a Hangar experience for creating/selecting aircraft. See `src/pages/index.js` and `src/pages/aircraft.js`.
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
-
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+Notes
+-----
+This README will continue to evolve as AI integrations, image tooling, and 3D conversion features are added. For now, the project focuses on the home page and hangar UX.
