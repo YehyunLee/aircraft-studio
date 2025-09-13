@@ -17,6 +17,8 @@ export default function Simulation() {
   const [selectedModel, setSelectedModel] = useState('');
   const [availableModels, setAvailableModels] = useState([]);
   const [error, setError] = useState('');
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardData, setLeaderboardData] = useState([]);
   const [isLoadingModel, setIsLoadingModel] = useState(false);
   const [input, setInput] = useState({
     forward: 0,
@@ -55,6 +57,13 @@ export default function Simulation() {
 
   // Enemy id counter for hit tracking
   const enemyIdCounterRef = useRef(1);
+  const enemiesAliveRef = useRef(0);
+  const enemiesSpawnedRef = useRef(false);
+
+  // Session stats & leaderboard flow
+  const sessionStartRef = useRef(null);
+  const statsRef = useRef({ shotsFired: 0, hits: 0, enemiesDestroyed: 0 });
+  const leaderboardPendingRef = useRef(false);
 
   // AR session refs
   const rendererRef = useRef();
@@ -403,6 +412,8 @@ export default function Simulation() {
                       // register hit
                       if (!s.hitEnemies) s.hitEnemies = new Set();
                       s.hitEnemies.add(entry.id);
+                      // stats: hits
+                      try { statsRef.current.hits = (statsRef.current.hits || 0) + 1; } catch (_) {}
                       entry.hp = (entry.hp ?? 10) - 1;
                       if (entry.hp <= 0) {
                         // explode and remove enemy
@@ -412,6 +423,8 @@ export default function Simulation() {
                         // remove from array
                         const idx = enemies.indexOf(entry);
                         if (idx >= 0) enemies.splice(idx, 1);
+                        // stats: enemies destroyed
+                        try { statsRef.current.enemiesDestroyed = (statsRef.current.enemiesDestroyed || 0) + 1; } catch (_) {}
                       }
                       // Optionally, consume the shot on hit (so it doesn't keep hitting others). Comment out to allow piercing.
                       // if (s.mesh && s.mesh.parent) s.mesh.parent.remove(s.mesh);
@@ -436,6 +449,16 @@ export default function Simulation() {
           } catch (err) {
             // ignore shot update errors
           }
+
+          // Detect end-of-wave: all enemies destroyed
+          try {
+            if (!leaderboardPendingRef.current && enemiesSpawnedRef.current) {
+              if ((enemiesAliveRef.current || 0) === 0) {
+                leaderboardPendingRef.current = true;
+                finalizeSessionAndShowLeaderboard();
+              }
+            }
+          } catch (_) {}
 
           // Update explosions (expand and fade)
           try {
@@ -552,6 +575,15 @@ export default function Simulation() {
       if (selectedModel) {
         placeAircraft();
       }
+      // Initialize session stats
+      try {
+        sessionStartRef.current = (performance.now() || Date.now()) / 1000;
+        statsRef.current = { shotsFired: 0, hits: 0, enemiesDestroyed: 0 };
+        leaderboardPendingRef.current = false;
+        enemiesAliveRef.current = 0;
+        enemiesSpawnedRef.current = false;
+        setShowLeaderboard(false);
+      } catch (_) {}
     } catch (err) {
       console.error('AR initialization failed:', err);
       setError('Failed to start AR session: ' + err.message);
@@ -569,6 +601,9 @@ export default function Simulation() {
       const now = (performance.now() || Date.now()) / 1000;
       if (now - (lastShotTimeRef.current || 0) < SHOT_COOLDOWN) return;
       lastShotTimeRef.current = now;
+
+  // stats: shots fired
+  try { statsRef.current.shotsFired = (statsRef.current.shotsFired || 0) + 1; } catch (_) {}
 
       // Play shooting sound
       if (shootingSoundRef.current && shootingSoundRef.current.buffer) {
@@ -865,6 +900,52 @@ export default function Simulation() {
       if (obj.parent) obj.parent.remove(obj);
     } catch (_) {}
     entry.dead = true;
+    try { enemiesAliveRef.current = Math.max(0, (enemiesAliveRef.current || 0) - 1); } catch (_) {}
+  };
+
+  // Finalize session: update leaderboard (localStorage), exit AR, and show modal
+  const finalizeSessionAndShowLeaderboard = () => {
+    const endSec = (performance.now() || Date.now()) / 1000;
+    const startSec = sessionStartRef.current || endSec;
+    const clearTime = Math.max(0, endSec - startSec);
+    const stats = statsRef.current || { shotsFired: 0, hits: 0, enemiesDestroyed: 0 };
+
+    try {
+      const key = 'aircraftLeaderboard';
+      const raw = localStorage.getItem(key);
+      const data = raw ? JSON.parse(raw) : {};
+      const modelKey = selectedModel || 'unknown-model';
+      const name = (availableModels.find(m => m.modelPath === selectedModel)?.name) || modelKey;
+      const rec = data[modelKey] || {
+        modelPath: modelKey,
+        name,
+        bestTime: null,
+        totalClears: 0,
+        totalEnemiesDestroyed: 0,
+        totalShots: 0,
+        totalHits: 0,
+      };
+      rec.bestTime = rec.bestTime == null ? clearTime : Math.min(rec.bestTime, clearTime);
+      rec.totalClears += 1;
+      rec.totalEnemiesDestroyed += (stats.enemiesDestroyed || 0);
+      rec.totalShots += (stats.shotsFired || 0);
+      rec.totalHits += (stats.hits || 0);
+      data[modelKey] = rec;
+      localStorage.setItem(key, JSON.stringify(data));
+
+      const arr = Object.values(data);
+      arr.sort((a, b) => {
+        if (a.bestTime == null && b.bestTime == null) return 0;
+        if (a.bestTime == null) return 1;
+        if (b.bestTime == null) return -1;
+        return a.bestTime - b.bestTime;
+      });
+      setLeaderboardData(arr);
+    } catch (_) {}
+
+    try { exitAR(); } catch (_) {}
+    // Delay showing the leaderboard to avoid laggy feel right after AR teardown
+    setTimeout(() => setShowLeaderboard(true), 1000);
   };
 
   const placeAircraft = async () => {
@@ -1104,6 +1185,7 @@ export default function Simulation() {
 
                   const nowSec = (performance.now() || Date.now()) / 1000;
                   enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6, shootAudio: enemyShootAudio, nextFireAt: nowSec + 0.6 + Math.random() * 1.5, hp: 10, id: enemyIdCounterRef.current++ });
+                  try { enemiesAliveRef.current = (enemiesAliveRef.current || 0) + 1; enemiesSpawnedRef.current = true; } catch (_) {}
                 }
               } catch (err) {
                 console.warn('Failed to spawn enemy jets:', err);
@@ -1325,6 +1407,35 @@ export default function Simulation() {
           </div>
         )}
       </div>
+
+      {showLeaderboard && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60">
+          <div className="glass rounded-2xl p-6 w-full max-w-md text-left">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xl font-semibold">Leaderboard</h2>
+              <button className="px-3 py-1 bg-white/10 rounded-lg" onClick={() => setShowLeaderboard(false)}>Close</button>
+            </div>
+            <p className="text-sm text-white/60 mb-3">Fastest clear time per aircraft.</p>
+            <div className="space-y-2 max-h-[50vh] overflow-auto">
+              {leaderboardData.length === 0 && (
+                <div className="text-white/60 text-sm">No records yet.</div>
+              )}
+              {leaderboardData.map((rec, idx) => (
+                <div key={rec.modelPath + idx} className="flex items-center justify-between bg-white/5 rounded-xl p-3">
+                  <div className="text-sm">
+                    <div className="font-medium">{rec.name || rec.modelPath}</div>
+                    <div className="text-white/60 text-xs">Clears: {rec.totalClears} • Hits: {rec.totalHits} / Shots: {rec.totalShots}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-cyan-300 font-semibold">{rec.bestTime != null ? rec.bestTime.toFixed(2) + 's' : '-'}</div>
+                    <div className="text-white/60 text-xs">Enemies: {rec.totalEnemiesDestroyed}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .glass {
