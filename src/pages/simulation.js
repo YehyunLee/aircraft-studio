@@ -10,6 +10,11 @@ export default function Simulation() {
   const [availableModels, setAvailableModels] = useState([]);
   const [error, setError] = useState('');
   const [isLoadingModel, setIsLoadingModel] = useState(false);
+  const [input, setInput] = useState({
+    forward: 0,
+    right: 0,
+  });
+  const velocity = useRef(new THREE.Vector3());
 
   // AR session refs
   const rendererRef = useRef();
@@ -127,6 +132,59 @@ export default function Simulation() {
           camera.matrix.fromArray(view.transform.matrix);
           camera.projectionMatrix.fromArray(view.projectionMatrix);
           camera.updateMatrixWorld(true);
+
+          // Update aircraft movement
+          if (aircraftRef.current) {
+            const aircraft = aircraftRef.current;
+            const delta = 0.016; // Assuming 60fps
+
+            // Constant forward velocity
+            velocity.current.z = -1;
+
+            // Apply joystick input to velocity
+            const acceleration = new THREE.Vector3(
+              input.right * 2 * delta,
+              -input.forward * 2 * delta,
+              0
+            );
+
+            velocity.current.add(acceleration);
+
+            // Clamp velocity
+            velocity.current.x = THREE.MathUtils.clamp(velocity.current.x, -0.5, 0.5);
+            velocity.current.y = THREE.MathUtils.clamp(velocity.current.y, -0.5, 0.5);
+
+            // Apply rotation based on input
+            const q = new THREE.Quaternion();
+            const euler = new THREE.Euler();
+            euler.set(
+              -velocity.current.y * 0.5,
+              -velocity.current.x * 0.5,
+              -velocity.current.x * 0.2
+            );
+            q.setFromEuler(euler);
+            aircraft.quaternion.multiply(q);
+
+            // Apply forward movement
+            const forward = new THREE.Vector3(0, 0, -1);
+            forward.applyQuaternion(aircraft.quaternion);
+            forward.multiplyScalar(velocity.current.z * delta * 2);
+            aircraft.position.add(forward);
+
+            // Apply sideways and vertical movement
+            const sideways = new THREE.Vector3(1, 0, 0);
+            sideways.applyQuaternion(aircraft.quaternion);
+            sideways.multiplyScalar(velocity.current.x * delta);
+            aircraft.position.add(sideways);
+
+            const up = new THREE.Vector3(0, 1, 0);
+            up.applyQuaternion(aircraft.quaternion);
+            up.multiplyScalar(velocity.current.y * delta);
+            aircraft.position.add(up);
+
+            // Dampen velocity
+            velocity.current.multiplyScalar(0.95);
+          }
 
           renderer.render(scene, camera);
         }
@@ -297,6 +355,27 @@ export default function Simulation() {
             )}
           </div>
         )}
+        
+        {isARActive && (
+          <div id="joystick-container" className="absolute bottom-8 left-1/2 -translate-x-1/2 w-64 h-48">
+            <div id="up-control" className="joystick-btn top-0 left-1/2 -translate-x-1/2 w-16 h-16"
+              onTouchStart={() => setInput(i => ({...i, forward: 1}))}
+              onTouchEnd={() => setInput(i => ({...i, forward: 0}))}
+            >▲</div>
+            <div id="down-control" className="joystick-btn bottom-0 left-1/2 -translate-x-1/2 w-16 h-16"
+              onTouchStart={() => setInput(i => ({...i, forward: -1}))}
+              onTouchEnd={() => setInput(i => ({...i, forward: 0}))}
+            >▼</div>
+            <div id="left-control" className="joystick-btn top-1/2 -translate-y-1/2 left-0 w-16 h-16"
+              onTouchStart={() => setInput(i => ({...i, right: -1}))}
+              onTouchEnd={() => setInput(i => ({...i, right: 0}))}
+            >◀</div>
+            <div id="right-control" className="joystick-btn top-1/2 -translate-y-1/2 right-0 w-16 h-16"
+              onTouchStart={() => setInput(i => ({...i, right: 1}))}
+              onTouchEnd={() => setInput(i => ({...i, right: 0}))}
+            >▶</div>
+          </div>
+        )}
       </div>
 
       <style jsx>{`
@@ -304,6 +383,21 @@ export default function Simulation() {
           background: rgba(255, 255, 255, 0.03);
           backdrop-filter: blur(10px);
           border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .joystick-btn {
+          position: absolute;
+          background: rgba(255, 255, 255, 0.2);
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 2rem;
+          color: white;
+          user-select: none;
+        }
+        .joystick-btn:active {
+          background: rgba(255, 255, 255, 0.4);
         }
       `}</style>
     </div>
