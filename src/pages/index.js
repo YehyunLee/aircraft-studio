@@ -492,15 +492,48 @@ export default function Home() {
                   </button>
                 </div>
 
-                {/* Enhanced Prompt Display */}
-                {enhancedPrompt && (
-                  <div className="p-4 rounded-xl bg-gradient-to-r from-violet-500/10 to-violet-600/10 border border-violet-500/30">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-violet-400">✨</span>
-                      <p className="text-sm font-semibold text-violet-300">AI Enhanced Prompt</p>
+                {/* Combined Output Card: AI Prompt + Image/Model */}
+                {(enhancedPrompt || currentImageUrl) && (
+                  <section className="glass-card rounded-2xl p-6">
+                    <div className="space-y-4">
+                      {enhancedPrompt && (
+                        <div className="p-4 rounded-xl bg-gradient-to-r from-violet-500/10 to-violet-600/10 border border-violet-500/30">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-violet-400">✨</span>
+                            <p className="text-sm font-semibold text-violet-300">AI Enhanced Prompt</p>
+                          </div>
+                          <p className="text-sm text-white/90 leading-relaxed">{enhancedPrompt}</p>
+                        </div>
+                      )}
+                      {currentImageUrl && (
+                        <div className="space-y-4">
+                          <div className="relative rounded-xl overflow-hidden bg-white/5 border border-white/10">
+                            <img
+                              src={currentImageUrl}
+                              alt="Generated aircraft"
+                              className="w-full h-auto"
+                            />
+                          </div>
+                          {currentModelUrl ? (
+                            <div className="flex flex-col sm:flex-row gap-3">
+                              <button
+                                onClick={() => setPreviewModel({ src: currentModelUrl, title: (enhancedPrompt || prompt || "3D Model") })}
+                                className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
+                              >
+                                👁 Quick Preview
+                              </button>
+                              <Link
+                                href={`/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
+                                className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
+                              >
+                                🎮 AR Simulation
+                              </Link>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-white/90 leading-relaxed">{enhancedPrompt}</p>
-                  </div>
+                  </section>
                 )}
 
                 {/* Error Display */}
@@ -516,37 +549,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Current Generation Display */}
-            {currentImageUrl && (
-              <section className="glass-card rounded-2xl p-6">
-                <h3 className="text-lg font-semibold mb-4">Current Generation</h3>
-                <div className="space-y-4">
-                  <div className="relative rounded-xl overflow-hidden bg-white/5 border border-white/10">
-                    <img
-                      src={currentImageUrl}
-                      alt="Generated aircraft"
-                      className="w-full h-auto"
-                    />
-                  </div>
-                  {currentModelUrl ? (
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <button
-                        onClick={() => setPreviewModel({ src: currentModelUrl, title: (enhancedPrompt || prompt || "3D Model") })}
-                        className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
-                      >
-                        👁 Quick Preview
-                      </button>
-                      <Link
-                        href={`/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
-                        className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
-                      >
-                        🎮 AR Simulation
-                      </Link>
-                    </div>
-                  ) : null}
-                </div>
-              </section>
-            )}
+            {/* Current Generation Display merged above */}
 
             {/* Generation History */}
             {generationHistory.length > 0 && (
