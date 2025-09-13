@@ -32,8 +32,74 @@ export default function Simulation() {
       return next;
     });
   };
+
+  // Shoot from player aircraft: creates a thin plane oriented forward from aircraft
+  const shoot = () => {
+    if (!sceneRef.current || !aircraftRef.current) return;
+    try {
+      const now = (performance.now() || Date.now()) / 1000;
+      // Thin long plane geometry (length x width)
+      const width = 0.04;
+      const length = 2.0;
+      const geo = new THREE.PlaneGeometry(length, width, 1, 1);
+
+      const mat = makeShotMaterial(now);
+
+      // create mesh and position it in front of aircraft
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.renderOrder = 9998;
+      mesh.frustumCulled = false;
+
+      // Position plane so its origin is at aircraft and extends forward along +Z
+      mesh.position.set(0, 0, length / 2 + 0.02);
+      // Rotate so plane faces along local forward (+Z)
+      mesh.rotation.x = 0;
+
+      // Attach to aircraft so it follows transforms
+      aircraftRef.current.add(mesh);
+
+      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat });
+    } catch (err) {
+      console.warn('Shoot failed', err);
+    }
+  };
   const velocity = useRef(new THREE.Vector3());
   const lastFrameTime = useRef(null);
+
+  // Shooting refs and shader factory
+  const shotsRef = useRef([]); // array of { mesh, start, life, material }
+  const SHOT_LIFETIME = 0.7; // seconds
+  const makeShotMaterial = (now) => {
+    return new THREE.ShaderMaterial({
+      transparent: true,
+      depthTest: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        uTime: { value: now },
+        uLife: { value: 0 },
+        uColor: { value: new THREE.Color(0x66ffff) },
+      },
+      vertexShader: `
+        varying float vUvX;
+        void main() {
+          vUvX = position.x + 0.5;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uLife;
+        uniform vec3 uColor;
+        varying float vUvX;
+        void main() {
+          float alpha = (1.0 - smoothstep(0.0, 1.0, uLife)) * (1.0 - abs(vUvX - 0.5) * 2.0);
+          alpha = clamp(alpha, 0.0, 1.0);
+          gl_FragColor = vec4(uColor * (0.7 + 0.3 * (1.0 - uLife)), alpha);
+        }
+      `
+    });
+  };
 
   // AR session refs
   const rendererRef = useRef();
@@ -717,32 +783,42 @@ export default function Simulation() {
         )}
         
         {isARActive && (
-          <div id="joystick-container" className="absolute bottom-8 left-1/2 -translate-x-1/2 w-64 h-48">
-            <div id="up-control" className="joystick-btn top-0 left-1/2 -translate-x-1/2 w-16 h-16"
-              onTouchStart={() => updateInput({ forward: 1 })}
-              onTouchEnd={() => updateInput({ forward: 0 })}
-              onPointerDown={() => updateInput({ forward: 1 })}
-              onPointerUp={() => updateInput({ forward: 0 })}
-            >▲</div>
-            <div id="down-control" className="joystick-btn bottom-0 left-1/2 -translate-x-1/2 w-16 h-16"
-              onTouchStart={() => updateInput({ forward: -1 })}
-              onTouchEnd={() => updateInput({ forward: 0 })}
-              onPointerDown={() => updateInput({ forward: -1 })}
-              onPointerUp={() => updateInput({ forward: 0 })}
-            >▼</div>
-            <div id="left-control" className="joystick-btn top-1/2 -translate-y-1/2 left-0 w-16 h-16"
-              onTouchStart={() => updateInput({ right: -1 })}
-              onTouchEnd={() => updateInput({ right: 0 })}
-              onPointerDown={() => updateInput({ right: -1 })}
-              onPointerUp={() => updateInput({ right: 0 })}
-            >◀</div>
-            <div id="right-control" className="joystick-btn top-1/2 -translate-y-1/2 right-0 w-16 h-16"
-              onTouchStart={() => updateInput({ right: 1 })}
-              onTouchEnd={() => updateInput({ right: 0 })}
-              onPointerDown={() => updateInput({ right: 1 })}
-              onPointerUp={() => updateInput({ right: 0 })}
-            >▶</div>
-          </div>
+          <>
+            <div id="joystick-container" className="absolute bottom-6 left-6 w-44 h-44">
+              <div id="up-control" className="joystick-btn top-0 left-1/2 -translate-x-1/2 w-14 h-14"
+                onTouchStart={() => updateInput({ forward: 1 })}
+                onTouchEnd={() => updateInput({ forward: 0 })}
+                onPointerDown={() => updateInput({ forward: 1 })}
+                onPointerUp={() => updateInput({ forward: 0 })}
+              >▲</div>
+              <div id="down-control" className="joystick-btn bottom-0 left-1/2 -translate-x-1/2 w-14 h-14"
+                onTouchStart={() => updateInput({ forward: -1 })}
+                onTouchEnd={() => updateInput({ forward: 0 })}
+                onPointerDown={() => updateInput({ forward: -1 })}
+                onPointerUp={() => updateInput({ forward: 0 })}
+              >▼</div>
+              <div id="left-control" className="joystick-btn top-1/2 -translate-y-1/2 left-0 w-14 h-14"
+                onTouchStart={() => updateInput({ right: -1 })}
+                onTouchEnd={() => updateInput({ right: 0 })}
+                onPointerDown={() => updateInput({ right: -1 })}
+                onPointerUp={() => updateInput({ right: 0 })}
+              >◀</div>
+              <div id="right-control" className="joystick-btn top-1/2 -translate-y-1/2 right-0 w-14 h-14"
+                onTouchStart={() => updateInput({ right: 1 })}
+                onTouchEnd={() => updateInput({ right: 0 })}
+                onPointerDown={() => updateInput({ right: 1 })}
+                onPointerUp={() => updateInput({ right: 0 })}
+              >▶</div>
+            </div>
+
+            <button
+              onTouchStart={(e) => { e.preventDefault(); shoot(); }}
+              onPointerDown={(e) => { e.preventDefault(); shoot(); }}
+              className="shoot-btn absolute bottom-8 right-6 w-20 h-20 rounded-full flex items-center justify-center text-black font-bold"
+            >
+              Fire
+            </button>
+          </>
         )}
       </div>
 
@@ -768,6 +844,19 @@ export default function Simulation() {
         }
         .joystick-btn:active {
           background: rgba(255, 255, 255, 0.4);
+        }
+        /* Shoot button */
+        .shoot-btn {
+          background: linear-gradient(180deg, #ffd166, #ff9f1c);
+          border: 2px solid rgba(0,0,0,0.12);
+          box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+          user-select: none;
+          -webkit-user-select: none;
+          touch-action: manipulation;
+        }
+        .shoot-btn:active {
+          transform: scale(0.96);
+          filter: brightness(0.95);
         }
         /* HUD indicator */
         .hud-indicator {
@@ -797,6 +886,8 @@ export default function Simulation() {
           font-size: 11px;
           opacity: 0.9;
         }
+        /* ensure overlay controls don't get hidden behind WebXR dom overlay chrome */
+        #ar-ui-container { position: relative; z-index: 1000; }
       `}</style>
     </div>
   );
