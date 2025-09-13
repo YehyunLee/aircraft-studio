@@ -160,7 +160,7 @@ export default function Home() {
 
 
 
-  const generate3DModel = async (imageUrl, historyIndex) => {
+  const generate3DModel = async (imageUrl, historyIndex, markCurrent = false) => {
     if (!imageUrl) {
       setError("Please generate an image first");
       return null;
@@ -223,7 +223,7 @@ export default function Home() {
           });
         }
         
-        if (imageUrl === currentImageUrl) {
+        if (markCurrent || imageUrl === currentImageUrl) {
           setCurrentModelUrl(resolvedModelUrl);
         }
         return resolvedModelUrl;
@@ -257,7 +257,7 @@ export default function Home() {
       const imgRes = await generateImage(promptToUse);
       if (!imgRes) throw new Error('Image generation failed');
       setFlowStep('converting-3d');
-      const modelUrl = await generate3DModel(imgRes.imageUrl, imgRes.index);
+  const modelUrl = await generate3DModel(imgRes.imageUrl, imgRes.index, true);
       if (!modelUrl) throw new Error('3D conversion failed');
       setFlowStep('done');
     } catch (e) {
