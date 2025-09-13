@@ -1,4 +1,4 @@
-import Groq from "groq-sdk";
+import { Groq } from "groq-sdk";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
           content: `Transform this idea into a detailed image generation prompt: "${prompt}"`,
         },
       ],
-      model: "mixtral-8x7b-32768",
+      model: "llama-3.3-70b-versatile",
       temperature: 0.7,
       max_tokens: 300,
     });
