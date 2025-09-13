@@ -1,17 +1,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useUser } from "@auth0/nextjs-auth0";
 
 export default function Home() {
+  const { user, error: userError, isLoading } = useUser();
   const [prompt, setPrompt] = useState("");
   const [enhancedPrompt, setEnhancedPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generating3D, setGenerating3D] = useState(false);
-  const [imageUrl, setImageUrl] = useState("");
-  const [modelUrl, setModelUrl] = useState("");
+  const [currentImageUrl, setCurrentImageUrl] = useState("");
+  const [currentModelUrl, setCurrentModelUrl] = useState("");
   const [error, setError] = useState("");
   const [showGenerator, setShowGenerator] = useState(false);
+  
+  // History of all generations in this session
+  const [generationHistory, setGenerationHistory] = useState([]);
+  const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(null);
 
   const enhancePrompt = async () => {
     if (!prompt.trim()) {
@@ -56,7 +62,6 @@ export default function Home() {
 
     setGeneratingImage(true);
     setError("");
-    setImageUrl("");
 
     try {
       const response = await fetch("/api/generate-image", {
@@ -70,7 +75,19 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
-        setImageUrl(data.image);
+        const newGeneration = {
+          id: Date.now(),
+          originalPrompt: prompt,
+          enhancedPrompt: enhancedPrompt,
+          imageUrl: data.image,
+          modelUrl: null,
+          timestamp: new Date().toISOString()
+        };
+        
+        setCurrentImageUrl(data.image);
+        setCurrentModelUrl("");
+        setGenerationHistory(prev => [...prev, newGeneration]);
+        setSelectedHistoryIndex(generationHistory.length);
       } else {
         setError(data.error || "Failed to generate image");
       }
@@ -82,7 +99,7 @@ export default function Home() {
     }
   };
 
-  const downloadImage = () => {
+  const downloadImage = (imageUrl) => {
     if (!imageUrl) return;
 
     const link = document.createElement("a");
@@ -93,7 +110,7 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  const generate3DModel = async () => {
+  const generate3DModel = async (imageUrl, historyIndex) => {
     if (!imageUrl) {
       setError("Please generate an image first");
       return;
@@ -101,7 +118,6 @@ export default function Home() {
 
     setGenerating3D(true);
     setError("");
-    setModelUrl("");
 
     try {
       const response = await fetch("/api/generate-3d", {
@@ -118,7 +134,18 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
-        setModelUrl(data.modelUrl);
+        // Update history with 3D model
+        if (historyIndex !== undefined && historyIndex !== null) {
+          setGenerationHistory(prev => {
+            const updated = [...prev];
+            updated[historyIndex].modelUrl = data.modelUrl;
+            return updated;
+          });
+        }
+        
+        if (imageUrl === currentImageUrl) {
+          setCurrentModelUrl(data.modelUrl);
+        }
       } else {
         setError(data.error || "Failed to generate 3D model");
       }
@@ -130,7 +157,7 @@ export default function Home() {
     }
   };
 
-  const download3DModel = () => {
+  const download3DModel = (modelUrl) => {
     if (!modelUrl) return;
 
     const link = document.createElement("a");
@@ -141,11 +168,22 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  const resetGenerator = () => {
+  const startNewGeneration = () => {
     setPrompt("");
     setEnhancedPrompt("");
-    setImageUrl("");
-    setModelUrl("");
+    setCurrentImageUrl("");
+    setCurrentModelUrl("");
+    setError("");
+    setSelectedHistoryIndex(null);
+  };
+
+  const selectFromHistory = (index) => {
+    const item = generationHistory[index];
+    setPrompt(item.originalPrompt);
+    setEnhancedPrompt(item.enhancedPrompt || "");
+    setCurrentImageUrl(item.imageUrl);
+    setCurrentModelUrl(item.modelUrl || "");
+    setSelectedHistoryIndex(index);
     setError("");
   };
 
@@ -157,8 +195,13 @@ export default function Home() {
             <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-cyan-400 to-violet-500 flex items-center justify-center text-black font-bold">A</div>
             <h1 className="text-lg font-semibold tracking-tight">Aircraft Studio</h1>
           </div>
-          <nav>
+          <nav className="flex items-center gap-3">
             <Link href="/aircraft" className="text-xs text-cyan-300 hover:underline">Hangar</Link>
+            {user ? (
+              <Link href="/profile" className="text-xs text-violet-300 hover:underline">Profile</Link>
+            ) : (
+              <a href="/api/auth/login" className="text-xs text-violet-300 hover:underline">Login</a>
+            )}
           </nav>
         </div>
       </header>
@@ -200,114 +243,193 @@ export default function Home() {
             </section>
           </>
         ) : (
-          <section className="glass rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">AI Aircraft Generator</h2>
-              <button 
-                onClick={() => {
-                  setShowGenerator(false);
-                  resetGenerator();
-                }}
-                className="text-sm text-white/60 hover:text-white"
-              >
-                ← Back
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-white/75 mb-2">
-                  Describe your aircraft
-                </label>
-                <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="e.g., 'F-22 Raptor in flight' or 'futuristic stealth bomber with blue accents'"
-                  className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/40 resize-none h-24 focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={enhancePrompt}
-                  disabled={loading || !prompt.trim()}
-                  className="px-4 py-2 rounded-lg bg-violet-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-400 transition-colors"
+          <div className="space-y-4">
+            {/* Header Section */}
+            <section className="glass rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">AI Aircraft Generator</h2>
+                <button 
+                  onClick={() => {
+                    setShowGenerator(false);
+                    startNewGeneration();
+                  }}
+                  className="text-sm text-white/60 hover:text-white"
                 >
-                  {loading ? "Enhancing..." : "✨ Enhance with AI"}
-                </button>
-                <button
-                  onClick={generateImage}
-                  disabled={generatingImage || (!prompt.trim() && !enhancedPrompt)}
-                  className="px-4 py-2 rounded-lg bg-cyan-400 text-black font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-300 transition-colors"
-                >
-                  {generatingImage ? "Generating..." : "🎨 Generate Image"}
+                  ← Back
                 </button>
               </div>
 
-              {enhancedPrompt && (
-                <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
-                  <p className="text-xs text-violet-300 mb-1">Enhanced prompt:</p>
-                  <p className="text-sm text-white/90">{enhancedPrompt}</p>
+              {/* Input Section */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-white/75 mb-2">
+                    Describe your aircraft
+                  </label>
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="e.g., 'F-22 Raptor in flight' or 'futuristic stealth bomber with blue accents'"
+                    className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/40 resize-none h-24 focus:outline-none focus:border-cyan-400"
+                  />
                 </div>
-              )}
 
-              {error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
-                  {error}
+                <div className="flex gap-2">
+                  <button
+                    onClick={enhancePrompt}
+                    disabled={loading || !prompt.trim()}
+                    className="px-4 py-2 rounded-lg bg-violet-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-400 transition-colors"
+                  >
+                    {loading ? "Enhancing..." : "✨ Enhance with AI"}
+                  </button>
+                  <button
+                    onClick={generateImage}
+                    disabled={generatingImage || (!prompt.trim() && !enhancedPrompt)}
+                    className="px-4 py-2 rounded-lg bg-cyan-400 text-black font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-cyan-300 transition-colors"
+                  >
+                    {generatingImage ? "Generating..." : "🎨 Generate Image"}
+                  </button>
+                  <button
+                    onClick={startNewGeneration}
+                    className="px-4 py-2 rounded-lg bg-white/10 text-white font-medium hover:bg-white/20 transition-colors"
+                  >
+                    📝 New
+                  </button>
                 </div>
-              )}
 
-              {imageUrl && (
-                <div className="space-y-3">
-                  <div className="relative rounded-lg overflow-hidden bg-white/5">
-                    <img
-                      src={imageUrl}
-                      alt="Generated aircraft"
-                      className="w-full h-auto"
-                    />
+                {enhancedPrompt && (
+                  <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                    <p className="text-xs text-violet-300 mb-1">Enhanced prompt:</p>
+                    <p className="text-sm text-white/90">{enhancedPrompt}</p>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={downloadImage}
-                      className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-colors"
-                    >
-                      💾 Download Image
-                    </button>
-                    <button
-                      onClick={generate3DModel}
-                      disabled={generating3D}
-                      className="px-3 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-cyan-400 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-                    >
-                      {generating3D ? "Converting to 3D..." : "🎯 Convert to 3D"}
-                    </button>
-                    <button
-                      onClick={resetGenerator}
-                      className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-colors"
-                    >
-                      🔄 New Design
-                    </button>
-                  </div>
-                </div>
-              )}
+                )}
 
-              {modelUrl && (
-                <div className="p-3 rounded-lg bg-gradient-to-r from-violet-500/10 to-cyan-400/10 border border-cyan-400/20">
-                  <p className="text-xs text-cyan-300 mb-2">✅ 3D Model Generated!</p>
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={download3DModel}
-                      className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-sm font-medium hover:bg-cyan-300 transition-colors"
-                    >
-                      📦 Download GLB File
-                    </button>
-                    <p className="text-xs text-white/60 flex items-center">
-                      Model saved: {modelUrl.split("/").pop()}
-                    </p>
+                {error && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+                    {error}
                   </div>
+                )}
+
+                {/* Current Generation */}
+                {currentImageUrl && (
+                  <div className="space-y-3">
+                    <div className="relative rounded-lg overflow-hidden bg-white/5">
+                      <img
+                        src={currentImageUrl}
+                        alt="Generated aircraft"
+                        className="w-full h-auto"
+                      />
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => downloadImage(currentImageUrl)}
+                        className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-colors"
+                      >
+                        💾 Download Image
+                      </button>
+                      <button
+                        onClick={() => generate3DModel(currentImageUrl, selectedHistoryIndex)}
+                        disabled={generating3D}
+                        className="px-3 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-cyan-400 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                      >
+                        {generating3D ? "Converting to 3D..." : "🎯 Convert to 3D"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {currentModelUrl && (
+                  <div className="p-3 rounded-lg bg-gradient-to-r from-violet-500/10 to-cyan-400/10 border border-cyan-400/20">
+                    <p className="text-xs text-cyan-300 mb-2">✅ 3D Model Generated!</p>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => download3DModel(currentModelUrl)}
+                        className="px-3 py-2 rounded-lg bg-cyan-400 text-black text-sm font-medium hover:bg-cyan-300 transition-colors"
+                      >
+                        📦 Download GLB File
+                      </button>
+                      <p className="text-xs text-white/60 flex items-center">
+                        Model: {currentModelUrl.split("/").pop()}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* History Section */}
+            {generationHistory.length > 0 && (
+              <section className="glass rounded-2xl p-6">
+                <h3 className="text-lg font-semibold mb-3">Generation History</h3>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {generationHistory.map((item, index) => (
+                    <div 
+                      key={item.id}
+                      className={`p-3 rounded-lg bg-white/5 border transition-all cursor-pointer hover:bg-white/10 ${
+                        selectedHistoryIndex === index ? 'border-cyan-400' : 'border-white/10'
+                      }`}
+                      onClick={() => selectFromHistory(index)}
+                    >
+                      <div className="flex gap-3">
+                        <div className="w-20 h-20 rounded-lg overflow-hidden bg-white/10 flex-shrink-0">
+                          <img 
+                            src={item.imageUrl} 
+                            alt={`Generation ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-white/60 mb-1">#{index + 1}</p>
+                          <p className="text-sm text-white/90 truncate">{item.originalPrompt}</p>
+                          <div className="flex gap-2 mt-2">
+                            <span className="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded">Image</span>
+                            {item.modelUrl && (
+                              <span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-1 rounded">3D</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadImage(item.imageUrl);
+                            }}
+                            className="text-xs text-white/60 hover:text-white"
+                            title="Download Image"
+                          >
+                            💾
+                          </button>
+                          {item.modelUrl ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                download3DModel(item.modelUrl);
+                              }}
+                              className="text-xs text-white/60 hover:text-white"
+                              title="Download 3D Model"
+                            >
+                              📦
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                generate3DModel(item.imageUrl, index);
+                              }}
+                              disabled={generating3D}
+                              className="text-xs text-white/60 hover:text-white disabled:opacity-30"
+                              title="Generate 3D"
+                            >
+                              🎯
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-          </section>
+              </section>
+            )}
+          </div>
         )}
       </main>
 

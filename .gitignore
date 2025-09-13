@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 package-lock.json
+
+# Generated 3D models
+/public/models/*.glb
+
+# Temporary files
+/temp
