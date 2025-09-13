@@ -325,6 +325,27 @@ export default function Simulation() {
             // swallow errors to avoid breaking render loop
           }
 
+          // Enemy firing scheduler (randomized cadence)
+          try {
+            const nowSec = (performance.now() || Date.now()) / 1000;
+            const enemies = enemiesRef.current || [];
+            for (let i = 0; i < enemies.length; ++i) {
+              const entry = enemies[i];
+              if (!entry || !entry.object) continue;
+              if (!entry.nextFireAt) {
+                entry.nextFireAt = nowSec + 0.6 + Math.random() * 1.5; // initial stagger
+              }
+              if (nowSec >= entry.nextFireAt) {
+                // Fire and schedule next
+                try { fireEnemyShot(entry); } catch (_) {}
+                const nextInterval = 0.9 + Math.random() * 1.1; // 0.9s - 2.0s
+                entry.nextFireAt = nowSec + nextInterval;
+              }
+            }
+          } catch (e) {
+            // ignore enemy firing errors
+          }
+
           // Update active shots
           try {
             const nowSec = (performance.now() || Date.now()) / 1000;
@@ -600,6 +621,122 @@ export default function Simulation() {
     }
   };
 
+  // Spawn a red beam from an enemy toward the player's aircraft (with positional audio)
+  const fireEnemyShot = (entry) => {
+    const scene = sceneRef.current;
+    const enemy = entry && entry.object;
+    const player = aircraftRef.current;
+    if (!scene || !enemy || !player) return;
+
+    try {
+      const now = (performance.now() || Date.now()) / 1000;
+
+      // Play enemy positional shooting sound if available
+      try {
+        if (entry.shootAudio) {
+          // If buffer not yet assigned but we have it from player's shooting sound, set it now
+          if (!entry.shootAudio.buffer && shootingSoundRef.current && shootingSoundRef.current.buffer) {
+            entry.shootAudio.setBuffer(shootingSoundRef.current.buffer);
+          }
+          if (entry.shootAudio.buffer) {
+            if (entry.shootAudio.isPlaying) entry.shootAudio.stop();
+            entry.shootAudio.setVolume(0.9);
+            entry.shootAudio.play();
+          }
+        }
+      } catch (_) {}
+
+      // Compute muzzle in enemy local space -> world
+      const slightUp = 0.05;
+      const startOffset = 0.55;
+      const muzzleLocal = new THREE.Vector3(0, slightUp, startOffset);
+      const startPos = muzzleLocal.clone();
+      enemy.localToWorld(startPos);
+
+      // Aim direction toward player with small random spread
+      const dir = new THREE.Vector3().subVectors(player.position, startPos);
+      const distToPlayer = Math.max(0.001, dir.length());
+      dir.normalize();
+      try {
+        const spread = THREE.MathUtils.degToRad(AIM_SPREAD_DEG * 0.8); // a bit tighter than player
+        const r = Math.sqrt(Math.random());
+        const theta = Math.random() * Math.PI * 2.0;
+        const offsetMag = Math.tan(spread) * r;
+        const dx = offsetMag * Math.cos(theta);
+        const dy = offsetMag * Math.sin(theta);
+        const tempUp = new THREE.Vector3(0, 1, 0);
+        const right = new THREE.Vector3().crossVectors(dir, tempUp);
+        if (right.lengthSq() < 1e-6) {
+          tempUp.set(1, 0, 0);
+          right.crossVectors(dir, tempUp);
+        }
+        right.normalize();
+        const upPerp = new THREE.Vector3().crossVectors(right, dir).normalize();
+        dir.addScaledVector(right, dx).addScaledVector(upPerp, dy).normalize();
+      } catch (_) {}
+
+      // Beam geometry and material (red)
+      const maxBeamLength = 1.9;
+      const beamLength = Math.max(0.6, Math.min(maxBeamLength, distToPlayer));
+      const beamWidth = 0.034;
+      const geo = new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1);
+      geo.translate(0, beamLength * 0.5, 0);
+
+      const mat = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        uniforms: {
+          uLife: { value: 0.0 },
+          uTime: { value: now },
+          uColor: { value: new THREE.Color(1.0, 0.22, 0.22) },
+        },
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          precision highp float;
+          varying vec2 vUv;
+          uniform float uLife;
+          uniform float uTime;
+          uniform vec3 uColor;
+          void main() {
+            float across = abs(vUv.x - 0.5) * 2.0;
+            float along = vUv.y;
+            float core = smoothstep(1.0, 0.0, across);
+            core *= core;
+            float tip = smoothstep(0.75, 1.0, along) * smoothstep(1.0, 0.75, along);
+            float lifeFade = smoothstep(1.0, 0.0, uLife);
+            float alpha = clamp(core * 0.9 + tip * 0.6, 0.0, 1.0) * lifeFade;
+            vec3 col = uColor * (1.0 + tip * 0.5);
+            float baseFade = smoothstep(0.08, 0.0, along);
+            alpha *= (1.0 - baseFade * 0.6);
+            if (alpha <= 0.001) discard;
+            gl_FragColor = vec4(col, alpha);
+          }
+        `,
+      });
+
+      const mesh = new THREE.Mesh(geo, mat);
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      mesh.quaternion.copy(q);
+      mesh.position.copy(startPos);
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 999;
+      scene.add(mesh);
+
+      const vel = new THREE.Vector3().copy(dir).multiplyScalar(SHOT_SPEED * 0.95);
+      shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel });
+    } catch (_) {
+      // ignore
+    }
+  };
+
   const placeAircraft = async () => {
     if (!selectedModel || aircraftRef.current || !sceneRef.current) return;
 
@@ -730,6 +867,22 @@ export default function Simulation() {
                     // ignore marker errors
                   }
 
+                  // Attach positional audio for enemy shooting with distance-based attenuation
+                  let enemyShootAudio = null;
+                  try {
+                    if (audioListenerRef.current) {
+                      enemyShootAudio = new THREE.PositionalAudio(audioListenerRef.current);
+                      // If the shooting buffer is already loaded, set it now; else we'll set it on first fire
+                      if (shootingSoundRef.current && shootingSoundRef.current.buffer) {
+                        enemyShootAudio.setBuffer(shootingSoundRef.current.buffer);
+                      }
+                      enemyShootAudio.setRefDistance(1.2);
+                      enemyShootAudio.setRolloffFactor(1.8);
+                      if (enemyShootAudio.setDistanceModel) enemyShootAudio.setDistanceModel('exponential');
+                      enemyObj.add(enemyShootAudio);
+                    }
+                  } catch (_) {}
+
                   // Simple controller attached directly to the object
                   const controller = (() => {
                     // Simple wandering controller with avoidance
@@ -819,7 +972,8 @@ export default function Simulation() {
                     return { update, dispose, radius };
                   })();
 
-                  enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6 });
+                  const nowSec = (performance.now() || Date.now()) / 1000;
+                  enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6, shootAudio: enemyShootAudio, nextFireAt: nowSec + 0.6 + Math.random() * 1.5 });
                 }
               } catch (err) {
                 console.warn('Failed to spawn enemy jets:', err);
@@ -870,6 +1024,9 @@ export default function Simulation() {
     try {
       const enemies = enemiesRef.current || [];
       for (const e of enemies) {
+        try {
+          if (e.shootAudio && e.shootAudio.isPlaying) e.shootAudio.stop();
+        } catch (_) {}
         if (e.controller && typeof e.controller.dispose === 'function') e.controller.dispose();
         if (e.object && e.object.parent) e.object.parent.remove(e.object);
       }
