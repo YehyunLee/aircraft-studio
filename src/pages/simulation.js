@@ -20,6 +20,7 @@ export default function Simulation() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [isLoadingModel, setIsLoadingModel] = useState(false);
+  const [enemiesRemaining, setEnemiesRemaining] = useState(0);
   const [input, setInput] = useState({
     forward: 0,
     right: 0,
@@ -583,6 +584,7 @@ export default function Simulation() {
         enemiesAliveRef.current = 0;
         enemiesSpawnedRef.current = false;
         setShowLeaderboard(false);
+        setEnemiesRemaining(0);
       } catch (_) {}
     } catch (err) {
       console.error('AR initialization failed:', err);
@@ -900,7 +902,10 @@ export default function Simulation() {
       if (obj.parent) obj.parent.remove(obj);
     } catch (_) {}
     entry.dead = true;
-    try { enemiesAliveRef.current = Math.max(0, (enemiesAliveRef.current || 0) - 1); } catch (_) {}
+    try { 
+      enemiesAliveRef.current = Math.max(0, (enemiesAliveRef.current || 0) - 1);
+      setEnemiesRemaining(enemiesAliveRef.current);
+    } catch (_) {}
   };
 
   // Finalize session: update leaderboard (localStorage) and show modal (do NOT exit AR yet)
@@ -1190,8 +1195,13 @@ export default function Simulation() {
 
                   const nowSec = (performance.now() || Date.now()) / 1000;
                   enemiesRef.current.push({ object: enemyObj, controller, radius: 0.6, shootAudio: enemyShootAudio, nextFireAt: nowSec + 0.6 + Math.random() * 1.5, hp: 10, id: enemyIdCounterRef.current++ });
-                  try { enemiesAliveRef.current = (enemiesAliveRef.current || 0) + 1; enemiesSpawnedRef.current = true; } catch (_) {}
+                  try { 
+                    enemiesAliveRef.current = (enemiesAliveRef.current || 0) + 1; 
+                    enemiesSpawnedRef.current = true; 
+                    setEnemiesRemaining(enemiesAliveRef.current);
+                  } catch (_) {}
                 }
+                try { setEnemiesRemaining(enemiesAliveRef.current || 0); } catch (_) {}
               } catch (err) {
                 console.warn('Failed to spawn enemy jets:', err);
               }
@@ -1266,6 +1276,7 @@ export default function Simulation() {
     setIsARActive(false);
     setIsLoadingModel(false);
     setError('');
+    try { setEnemiesRemaining(0); } catch (_) {}
   };
 
   return (
@@ -1350,19 +1361,16 @@ export default function Simulation() {
             >
               Exit AR
             </button>
-            
-            {isLoadingModel && (
-              <div className="px-4 py-2 bg-black/60 backdrop-blur rounded-xl text-white text-sm flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                Loading aircraft...
-              </div>
-            )}
-            
-            {!isLoadingModel && aircraftRef.current && (
-              <div className="px-4 py-2 bg-green-500/60 backdrop-blur rounded-xl text-white text-sm">
-                Aircraft loaded
-              </div>
-            )}
+            <div
+              className={`px-4 py-2 backdrop-blur rounded-xl text-sm font-semibold shadow-md
+                ${enemiesRemaining === 0
+                  ? 'bg-green-500/80 text-black'
+                  : enemiesRemaining <= 3
+                    ? 'bg-yellow-400/90 text-black'
+                    : 'bg-red-500/80 text-white'}`}
+            >
+              Enemies left: {enemiesRemaining}
+            </div>
           </div>
         )}
         
