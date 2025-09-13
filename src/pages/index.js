@@ -22,6 +22,27 @@ export default function Home() {
   const [generationHistory, setGenerationHistory] = useState([]);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(null);
 
+  // Load generation history from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedHistory = localStorage.getItem('generationHistory');
+      if (savedHistory) {
+        try {
+          setGenerationHistory(JSON.parse(savedHistory));
+        } catch (e) {
+          console.error('Failed to load generation history:', e);
+        }
+      }
+    }
+  }, []);
+
+  // Save generation history to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && generationHistory.length > 0) {
+      localStorage.setItem('generationHistory', JSON.stringify(generationHistory));
+    }
+  }, [generationHistory]);
+
   // Listen for messages from the preview iframe
   useEffect(() => {
     function handleMessage(e) {
