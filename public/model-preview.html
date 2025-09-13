@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Preview</title>
+    <style>
+      html,body{height:100%;margin:0;background:#111;color:#fff;font-family:Inter, Arial, sans-serif}
+      #container{position:fixed;inset:0}
+      #overlay{position:fixed;left:12px;top:12px;z-index:10;background:rgba(0,0,0,0.6);padding:8px;border-radius:6px}
+      .modal-close{position:fixed;right:12px;top:12px;z-index:10}
+      #controls{position:fixed;left:12px;bottom:12px;z-index:10;background:rgba(0,0,0,0.6);padding:8px;border-radius:6px;display:flex;gap:8px;align-items:center}
+      button{padding:8px 10px;border-radius:6px;border:none;background:rgba(255,255,255,0.06);color:#fff;cursor:pointer}
+      input[type=range]{width:160px}
+    </style>
+  </head>
+  <body>
+    <div class="modal-close">
+      <button id="close" aria-label="Close preview">Close</button>
+    </div>
+    <div id="container"></div>
+    <div id="overlay"><div id="status">Loading model...</div></div>
+    <div id="controls">
+      <label style="font-size:12px">Scale <input id="scale" type="range" min="0.01" max="3" step="0.01" value="1"></label>
+      <button id="reset">Reset</button>
+    </div>
+
+    <script type="module">
+      import * as THREE from 'https://cdn.skypack.dev/three@0.128/build/three.module.js';
+      import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.128/examples/jsm/loaders/GLTFLoader.js';
+      import { OrbitControls } from 'https://cdn.skypack.dev/three@0.128/examples/jsm/controls/OrbitControls.js';
+      import { SkeletonUtils } from 'https://cdn.skypack.dev/three@0.128/examples/jsm/utils/SkeletonUtils.js';
+
+      const params = new URLSearchParams(window.location.search);
+      const modelUrl = params.get('modelUrl');
+
+      const container = document.getElementById('container');
+      const statusEl = document.getElementById('status');
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111111);
+
+      const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 100);
+      camera.position.set(0, 0.3, 1.2);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      container.appendChild(renderer.domElement);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1.0);
+      hemi.position.set(0, 1, 0);
+      scene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+      dir.position.set(3, 2, 2);
+      scene.add(dir);
+
+      const grid = new THREE.GridHelper(2, 10, 0x222222, 0x111111);
+      grid.position.y = -0.1;
+      scene.add(grid);
+
+      const group = new THREE.Group();
+      scene.add(group);
+
+      const loader = new GLTFLoader();
+      let model = null;
+
+      function fitCameraToObject(camera, object, offset = 1.2) {
+        const box = new THREE.Box3().setFromObject(object);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const maxSize = Math.max(size.x, size.y, size.z);
+        if (maxSize === 0) return;
+        const fitHeightDistance = maxSize / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)));
+        const fitWidthDistance = fitHeightDistance / camera.aspect;
+        const distance = offset * Math.max(fitHeightDistance, fitWidthDistance);
+        camera.position.copy(center);
+        camera.position.z += distance;
+        camera.position.y += distance * 0.08;
+        camera.lookAt(center);
+      }
+
+      function setStatus(s) { statusEl.textContent = s; }
+
+      if (!modelUrl) {
+        setStatus('No modelUrl provided');
+      } else {
+        setStatus('Loading model...');
+        loader.load(modelUrl, (gltf) => {
+          model = SkeletonUtils.clone(gltf.scene);
+          group.add(model);
+          fitCameraToObject(camera, model, 1.2);
+          setStatus('Model loaded — drag to rotate the model.');
+        }, (xhr) => {
+          if (xhr.total) setStatus('Loading: ' + Math.round(xhr.loaded / xhr.total * 100) + '%');
+        }, (err) => {
+          console.error(err);
+          setStatus('Error loading model');
+        });
+      }
+
+      // OrbitControls for zoom & pan; we'll rotate the model via pointer drag for a predictable orientation message
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableRotate = false; // disable camera rotation; model rotates on drag
+      controls.enablePan = false;
+
+      let isPointerDown = false;
+      let lastX = 0, lastY = 0;
+
+      renderer.domElement.addEventListener('pointerdown', (e) => {
+        isPointerDown = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        renderer.domElement.setPointerCapture && renderer.domElement.setPointerCapture(e.pointerId);
+      });
+
+      renderer.domElement.addEventListener('pointermove', (e) => {
+        if (!isPointerDown || !model) return;
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        group.rotation.y += dx * 0.01;
+        group.rotation.x += dy * 0.01;
+        group.rotation.x = Math.max(Math.min(group.rotation.x, Math.PI / 2), -Math.PI / 2);
+        lastX = e.clientX;
+        lastY = e.clientY;
+      });
+
+      renderer.domElement.addEventListener('pointerup', (e) => {
+        isPointerDown = false;
+        try { renderer.domElement.releasePointerCapture && renderer.domElement.releasePointerCapture(e.pointerId); } catch (e) {}
+      });
+      renderer.domElement.addEventListener('pointerleave', () => { isPointerDown = false; });
+
+      function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+      animate();
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // Controls
+      const closeBtn = document.getElementById('close');
+      const scaleEl = document.getElementById('scale');
+      const resetBtn = document.getElementById('reset');
+
+      closeBtn.addEventListener('click', () => {
+        postOrientation(false);
+        window.parent.postMessage({ type: 'model-preview-close' }, '*');
+      });
+
+      scaleEl.addEventListener('input', () => {
+        const s = parseFloat(scaleEl.value || '1');
+        if (model) {
+          model.scale.setScalar(s);
+          fitCameraToObject(camera, model, 1.2);
+        }
+      });
+
+      resetBtn.addEventListener('click', () => {
+        if (!model) return;
+        group.rotation.set(0,0,0);
+        group.position.set(0,0,0);
+        group.quaternion.set(0,0,0,1);
+        model.scale.setScalar(1);
+        scaleEl.value = '1';
+        fitCameraToObject(camera, model, 1.2);
+      });
+
+      function postOrientation(enter=false) {
+        // Send back group quaternion and model scale so parent can capture orientation if needed
+        const q = group.quaternion.toArray();
+        const scale = model ? (model.scale.x || 1) : 1;
+        window.parent.postMessage({ type: 'model-orientation', quaternion: q, scale, enter, complete: true }, '*');
+      }
+    </script>
+  </body>
+</html>

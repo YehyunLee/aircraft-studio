@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useUser } from "@auth0/nextjs-auth0";
+import Head from "next/head";
+import Script from "next/script";
 
 export default function Home() {
-  const { user, error: userError, isLoading } = useUser();
   const [prompt, setPrompt] = useState("");
   const [enhancedPrompt, setEnhancedPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,9 +15,35 @@ export default function Home() {
   const [error, setError] = useState("");
   const [showGenerator, setShowGenerator] = useState(false);
   
+  // Preview modal state
+  const [previewModel, setPreviewModel] = useState(null); // { src, title }
+  
   // History of all generations in this session
   const [generationHistory, setGenerationHistory] = useState([]);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(null);
+
+  // Listen for messages from the preview iframe
+  useEffect(() => {
+    function handleMessage(e) {
+      if (!e.data) return;
+      if (e.data.type === 'model-preview-close') {
+        setPreviewModel(null);
+        return;
+      }
+      if (e.data.type !== 'model-orientation') return;
+      // Received orientation from the preview iframe
+      const { quaternion, scale, enter } = e.data;
+      // Persist orientation for currently previewed model if needed (this app keeps orientations in state)
+      if (previewModel && previewModel.src) {
+        setGenerationHistory(prev => prev.map(item => item.modelUrl === previewModel.src ? ({ ...item, orientation: { quaternion, scale } }) : item));
+      }
+      // If the iframe asked to enter, you could trigger AR flow here using 'enter'
+    }
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [previewModel]);
+
 
   const enhancePrompt = async () => {
     if (!prompt.trim()) {
@@ -189,6 +215,14 @@ export default function Home() {
 
   return (
     <div className="min-h-dvh bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white font-sans p-6 sm:p-10">
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </Head>
+
+      <Script
+        src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
+        strategy="afterInteractive"
+      />
       <header className="max-w-xl mx-auto">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -197,11 +231,8 @@ export default function Home() {
           </div>
           <nav className="flex items-center gap-3">
             <Link href="/aircraft" className="text-xs text-cyan-300 hover:underline">Hangar</Link>
-            {user ? (
-              <Link href="/profile" className="text-xs text-violet-300 hover:underline">Profile</Link>
-            ) : (
-              <a href="/api/auth/login" className="text-xs text-violet-300 hover:underline">Login</a>
-            )}
+            <Link href="/profile" className="text-xs text-white/80 hover:underline">Profile</Link>
+            <a href="/api/auth/login" className="text-xs text-white/80 hover:underline">Login</a>
           </nav>
         </div>
       </header>
@@ -347,9 +378,18 @@ export default function Home() {
                       >
                         📦 Download GLB File
                       </button>
-                      <p className="text-xs text-white/60 flex items-center">
-                        Model: {currentModelUrl.split("/").pop()}
-                      </p>
+                       <button
+                         onClick={() => setPreviewModel({ src: currentModelUrl, title: (enhancedPrompt || prompt || "3D Model") })}
+                         className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-colors"
+                       >
+                         Quick Preview
+                       </button>
+                       <Link
+                         href={`/ar-preview?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
+                         className="px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                       >
+                         🎮 AR Preview
+                       </Link>
                     </div>
                   </div>
                 )}
@@ -399,16 +439,36 @@ export default function Home() {
                             💾
                           </button>
                           {item.modelUrl ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                download3DModel(item.modelUrl);
-                              }}
-                              className="text-xs text-white/60 hover:text-white"
-                              title="Download 3D Model"
-                            >
-                              📦
-                            </button>
+                            <>
+                               <button
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   setPreviewModel({ src: item.modelUrl, title: (item.originalPrompt || "3D Model") });
+                                 }}
+                                 className="text-xs text-white/60 hover:text-white"
+                                 title="Quick Preview"
+                               >
+                                 👁
+                               </button>
+                               <Link
+                                 href={`/ar-preview?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.originalPrompt || "3D Model")}`}
+                                 onClick={(e) => e.stopPropagation()}
+                                 className="text-xs text-cyan-300 hover:text-cyan-200"
+                                 title="AR Preview"
+                               >
+                                 🎮
+                               </Link>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  download3DModel(item.modelUrl);
+                                }}
+                                className="text-xs text-white/60 hover:text-white"
+                                title="Download 3D Model"
+                              >
+                                📦
+                              </button>
+                            </>
                           ) : (
                             <button
                               onClick={(e) => {
@@ -444,6 +504,30 @@ export default function Home() {
           border: 1px solid rgba(255, 255, 255, 0.1);
         }
       `}</style>
+
+      {/* 3D Preview Modal */}
+      {previewModel && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] rounded-2xl overflow-hidden border border-white/10">
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <h2 className="text-lg font-semibold">{previewModel.title}</h2>
+              <button
+                onClick={() => setPreviewModel(null)}
+                className="text-white/60 hover:text-white text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="relative" style={{ height: '60vh' }}>
+              <iframe
+                title="Model Preview"
+                src={`/model-preview.html?modelUrl=${encodeURIComponent(previewModel.src)}`}
+                style={{ position: 'absolute', inset: 0, border: 'none', width: '100%', height: '100%' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
