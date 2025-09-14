@@ -28,6 +28,9 @@ export default function Home({ userName = null }) {
   const [generationHistory, setGenerationHistory] = useState([]);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(null);
 
+  // Expand/collapse state for long AI Enhanced Prompt text
+  const [showFullEnhanced, setShowFullEnhanced] = useState(false);
+
   // Load generation history from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -48,6 +51,11 @@ export default function Home({ userName = null }) {
       localStorage.setItem('generationHistory', JSON.stringify(generationHistory));
     }
   }, [generationHistory]);
+
+  // Reset enhanced text expansion when a new enhanced prompt arrives
+  useEffect(() => {
+    setShowFullEnhanced(false);
+  }, [enhancedPrompt]);
 
   // Listen for messages from the preview iframe
   useEffect(() => {
@@ -534,7 +542,20 @@ export default function Home({ userName = null }) {
                             <span className="text-violet-400">✨</span>
                             <p className="text-sm font-semibold text-violet-300">AI Enhanced Prompt</p>
                           </div>
-                          <p className="text-sm text-white/90 leading-relaxed">{enhancedPrompt}</p>
+                          <p className="text-sm text-white/90 leading-relaxed">
+                            {showFullEnhanced || enhancedPrompt.length <= 220
+                              ? enhancedPrompt
+                              : `${enhancedPrompt.slice(0, 220)}…`}
+                          </p>
+                          {enhancedPrompt.length > 220 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowFullEnhanced((v) => !v)}
+                              className="mt-2 text-xs text-violet-300 hover:text-violet-200 underline underline-offset-2"
+                            >
+                              {showFullEnhanced ? 'See less' : 'See more…'}
+                            </button>
+                          )}
                         </div>
                       ) : (
                         flowRunning && flowStep === 'enhancing' && (
