@@ -1014,8 +1014,8 @@ export default function Simulation() {
     } catch (_) {}
   };
 
-  // Finalize session: update leaderboard (localStorage) and show modal (do NOT exit AR yet)
-  const finalizeSessionAndShowLeaderboard = () => {
+  // Finalize session: submit to global leaderboard API and also update localStorage; then show modal
+  const finalizeSessionAndShowLeaderboard = async () => {
     const endSec = (performance.now() || Date.now()) / 1000;
     const startSec = sessionStartRef.current || endSec;
     const clearTime = Math.max(0, endSec - startSec);
@@ -1044,14 +1044,45 @@ export default function Simulation() {
       data[modelKey] = rec;
       localStorage.setItem(key, JSON.stringify(data));
 
-      const arr = Object.values(data);
-      arr.sort((a, b) => {
-        if (a.bestTime == null && b.bestTime == null) return 0;
-        if (a.bestTime == null) return 1;
-        if (b.bestTime == null) return -1;
-        return a.bestTime - b.bestTime;
-      });
-      setLeaderboardData(arr);
+      // Submit to global leaderboard (Auth required). Ignore failures.
+      try {
+        const modelEntry = availableModels.find(m => m.modelPath === selectedModel) || null;
+        await fetch('/api/leaderboard/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            score: Math.max(0, Math.round(1000 + (stats.enemiesDestroyed || 0) * 100 + (stats.hits || 0) * 25 - (stats.shotsFired || 0) * 5 - Math.floor(clearTime * 10))),
+            clearTime,
+            enemiesDestroyed: stats.enemiesDestroyed || 0,
+            shotsFired: stats.shotsFired || 0,
+            hits: stats.hits || 0,
+            modelName: modelEntry?.name || null,
+            modelId: modelEntry?.modelId || null,
+            modelPath: selectedModel || null,
+          }),
+        });
+      } catch (e) {
+        console.warn('Failed to submit global leaderboard:', e);
+      }
+
+      // Fetch global leaderboard to show
+      try {
+        const resp = await fetch('/api/leaderboard/top?limit=20&sort=score');
+        const json = await resp.json();
+        if (json && json.ok && Array.isArray(json.entries)) {
+          setLeaderboardData(json.entries.map((it, idx) => ({
+            id: idx,
+            name: it?.user?.name || 'Anonymous',
+            score: it?.score || 0,
+            clearTime: it?.clearTime ?? null,
+            enemiesDestroyed: it?.enemiesDestroyed || 0,
+            shotsFired: it?.shotsFired || 0,
+            hits: it?.hits || 0,
+          })));
+        }
+      } catch (e) {
+        // ignore fetch errors
+      }
     } catch (_) {}
 
     // Show leaderboard overlay while still in AR; user will choose to close (and then we'll exit)
@@ -1617,23 +1648,24 @@ export default function Simulation() {
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60">
             <div className="glass rounded-2xl p-6 w-full max-w-md text-left">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xl font-semibold">Leaderboard</h2>
+                <h2 className="text-xl font-semibold">Global Leaderboard</h2>
                 <button className="px-3 py-1 bg-white/10 rounded-lg" onClick={closeLeaderboardAndExit}>Close</button>
               </div>
-              <p className="text-sm text-white/60 mb-3">Fastest clear time per aircraft.</p>
+              <p className="text-sm text-white/60 mb-3">Top scores from recent runs. Sign in to post yours.</p>
               <div className="space-y-2 max-h-[50vh] overflow-auto">
                 {leaderboardData.length === 0 && (
                   <div className="text-white/60 text-sm">No records yet.</div>
                 )}
                 {leaderboardData.map((rec, idx) => (
-                  <div key={rec.modelPath + idx} className="flex items-center justify-between bg-white/5 rounded-xl p-3">
+                  <div key={rec.id || idx} className="flex items-center justify-between bg-white/5 rounded-xl p-3">
                     <div className="text-sm">
-                      <div className="font-medium">{rec.name || rec.modelPath}</div>
-                      <div className="text-white/60 text-xs">Clears: {rec.totalClears} • Hits: {rec.totalHits} / Shots: {rec.totalShots}</div>
+                      <div className="font-medium">{rec.name || 'Anonymous'}</div>
+                      {rec.clearTime != null && (
+                        <div className="text-white/60 text-xs">Time: {rec.clearTime.toFixed ? rec.clearTime.toFixed(2) : rec.clearTime}s</div>
+                      )}
                     </div>
                     <div className="text-right">
-                      <div className="text-cyan-300 font-semibold">{rec.bestTime != null ? rec.bestTime.toFixed(2) + 's' : '-'}</div>
-                      <div className="text-white/60 text-xs">Enemies: {rec.totalEnemiesDestroyed}</div>
+                      <div className="text-cyan-300 font-semibold">{rec.score ?? 0} pts</div>
                     </div>
                   </div>
                 ))}

@@ -42,7 +42,7 @@ export default function LeaderboardPage({ userName = null, entries = [] }) {
             {entries.length === 0 ? (
               <div className="text-center py-10">
                 <p className="text-white/70">No runs yet. Be the first to top the charts!</p>
-                <p className="text-xs text-white/50 mt-2">Once we wire MongoDB, your best simulation stats will appear here.</p>
+                <p className="text-xs text-white/50 mt-2">Leaderboard updates globally from recent simulation runs.</p>
               </div>
             ) : (
               <ul className="divide-y divide-white/10">
@@ -50,9 +50,17 @@ export default function LeaderboardPage({ userName = null, entries = [] }) {
                   <li key={e.id || i} className="py-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-white/50 w-6 text-right">{i + 1}</span>
-                      <span className="font-medium">{e.name}</span>
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{e.name}</div>
+                        <div className="text-xs text-white/50 truncate">{e.modelName || 'Any Aircraft'}</div>
+                      </div>
                     </div>
-                    <div className="text-white/70 text-sm">{e.score ?? 0} pts</div>
+                    <div className="text-right">
+                      <div className="text-white/90 text-sm">{e.score ?? 0} pts</div>
+                      {e.clearTime != null && (
+                        <div className="text-white/50 text-[11px]">{e.clearTime.toFixed ? e.clearTime.toFixed(2) : e.clearTime}s</div>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -79,8 +87,24 @@ export async function getServerSideProps(context) {
   try {
     const session = await auth0.getSession(context.req);
     const userName = session?.user?.name || null;
-    // Placeholder entries
-    const entries = [];
+    // Fetch top global leaderboard from our API route on the server
+    const proto = (context.req.headers['x-forwarded-proto'] || '').toString() || 'http';
+    const host = context.req.headers.host;
+    const baseUrl = process.env.APP_BASE_URL || `${proto}://${host}`;
+    const resp = await fetch(`${baseUrl}/api/leaderboard/top?limit=50&sort=score`);
+    let entries = [];
+    if (resp.ok) {
+      const json = await resp.json();
+      if (json && json.ok && Array.isArray(json.entries)) {
+        entries = json.entries.map((it, idx) => ({
+          id: idx,
+          name: it?.user?.name || 'Anonymous',
+          score: it?.score || 0,
+          clearTime: it?.clearTime ?? null,
+          modelName: it?.model?.name || null,
+        }));
+      }
+    }
     return { props: { userName, entries } };
   } catch (e) {
     return { props: { userName: null, entries: [] } };

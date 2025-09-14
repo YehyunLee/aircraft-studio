@@ -46,11 +46,32 @@ Environment variables (see `.env.local.example`):
 
 Ensure the Google connection is enabled in your Auth0 tenant and named `google-oauth2` (default). The bottom nav now includes a Leaderboard tab.
 
+Database (MongoDB)
+------------------
+We use MongoDB Atlas (or a local MongoDB) for the global leaderboard.
+
+Environment variables (add to `.env.local`):
+
+- `MONGODB_URI` — e.g. `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/?retryWrites=true&w=majority`
+- `MONGODB_DB` — database name, e.g. `aircraftstudio`
+- `NEXT_PUBLIC_BASE_URL` — for SSR fetching, e.g. `https://localhost:3000`
+
+Install dependency:
+
+```bash
+npm install mongodb
+```
+
+Collections created as needed:
+
+- `leaderboard` — stores per-run documents with fields: `user`, `score`, `clearTime`, `enemiesDestroyed`, `shotsFired`, `hits`, `accuracy`, `model`, `createdAt`.
+
 Leaderboard
 -----------
 - Route: `/leaderboard`
-- Status: Initial UI placeholder using the same theme as the Home page.
-- Planned: Persist per-user simulation stats (score, hits, time, etc.) using MongoDB. User identity will come from Auth0 (display name used for the board). A simple API will aggregate and return the top runs.
+- Global: Uses MongoDB-backed API to fetch top scores across all users.
+- Submit: Simulation page posts to `/api/leaderboard/submit` after a wave is cleared. Requires Auth0 login.
+- View: Server-side fetch from `/api/leaderboard/top` to render the board.
 
 Notes
 -----
