@@ -586,13 +586,15 @@ export default function Home() {
       <footer className="max-w-4xl mx-auto mt-12 text-center">
         <p className="text-sm text-white/50 mb-2">Powered by</p>
         <div className="flex justify-center items-center gap-4 text-xs text-white/40">
-          <span>Fireworks</span>
+          <span>Auth0</span>
+          <span>•</span>
+          <span>MongoDB</span>
+          <span>•</span>
+          <span>Groq</span>
           <span>•</span>
           <span>Flux 1</span>
           <span>•</span>
           <span>Spar 3D</span>
-          <span>•</span>
-          <span>Groq</span>
         </div>
       </footer>
       </div>
