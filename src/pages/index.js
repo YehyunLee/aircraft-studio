@@ -564,16 +564,16 @@ export default function Home() {
                           {currentModelUrl ? (
                             <div className="flex flex-col sm:flex-row gap-3">
                               <button
-                                onClick={() => setPreviewModel({ src: currentModelUrl, title: (enhancedPrompt || prompt || "3D Model") })}
+                                onClick={() => setPreviewModel({ src: currentModelUrl, title: (generationHistory[selectedHistoryIndex]?.name || enhancedPrompt || prompt || "3D Model") })}
                                 className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
                               >
                                 👁 Quick Preview
                               </button>
                               <Link
                                 href={(currentModelUrl && currentModelUrl.startsWith('http'))
-                                  ? `/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || '3D Model')}`
+                                  ? `/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(generationHistory[selectedHistoryIndex]?.name || enhancedPrompt || prompt || '3D Model')}`
                                   : (generationHistory[selectedHistoryIndex]?.modelId
-                                      ? `/simulation?modelId=${encodeURIComponent(generationHistory[selectedHistoryIndex].modelId)}&title=${encodeURIComponent(enhancedPrompt || prompt || '3D Model')}`
+                                      ? `/simulation?modelId=${encodeURIComponent(generationHistory[selectedHistoryIndex].modelId)}&title=${encodeURIComponent(generationHistory[selectedHistoryIndex]?.name || enhancedPrompt || prompt || '3D Model')}`
                                       : '/simulation')}
                                 className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
                               >
