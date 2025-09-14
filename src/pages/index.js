@@ -393,13 +393,20 @@ export default function Home({ userName = null }) {
       setError('Please enter a prompt');
       return;
     }
-    setFlowRunning(true);
-    setFlowRunning('enhancing');
+    // Reset previous run artifacts so the new run is clean
+    setEnhancedPrompt("");
+    setCurrentImageUrl("");
+    setCurrentModelUrl("");
+    setPreviewModel(null);
+    setCurrentStats(null);
+    setSelectedHistoryIndex(null);
     setError('');
+    setFlowRunning(true);
+    setFlowStep('enhancing');
     try {
       const enhanced = await enhancePrompt();
-      // Show the enhanced prompt UI as soon as it's available (state already set in enhancePrompt)
-      const promptToUse = enhanced || enhancedPrompt || prompt;
+      // Prefer fresh enhanced text; do NOT fall back to any previous enhancedPrompt
+      const promptToUse = enhanced || prompt;
       // Ask the prompt-engineering endpoint for a short aircraft name (1-3 words)
       let aircraftName = null;
       let aircraftSlug = null;
