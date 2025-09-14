@@ -1,8 +1,9 @@
 import Link from "next/link";
 import Head from "next/head";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function LoginPage() {
+  const [isIOS, setIsIOS] = useState(false);
   const returnTo = "/"; // After login, send users back home by default
   const loginUrl = `/auth/login?connection=google-oauth2&returnTo=${encodeURIComponent(returnTo)}`;
 
@@ -32,6 +33,11 @@ export default function LoginPage() {
   // If loaded inside an iframe/webview, break out to top-level to ensure auth can set cookies on iOS
   useEffect(() => {
     try {
+      // Detect iOS (includes iPadOS)
+      const ua = navigator.userAgent || '';
+      const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      setIsIOS(!!isiOS);
+
       const isInIframe = window.self !== window.top;
       if (isInIframe) {
         window.top.location.href = window.location.href;
@@ -57,7 +63,9 @@ export default function LoginPage() {
         <header className="max-w-2xl mx-auto mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="h-10 w-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white font-bold text-lg">A</div>
+              <Link href="/" className="h-10 w-10 rounded-xl bg-white/10 border border-white/10 overflow-hidden flex items-center justify-center">
+                <img src="/logo.png" alt="Aircraft Studio" width={40} height={40} className="object-contain" />
+              </Link>
               <div>
                 <h1 className="text-xl font-semibold tracking-tight">Aircraft Studio</h1>
                 <p className="text-xs text-white/60">AI design • AR simulation</p>
@@ -85,10 +93,12 @@ export default function LoginPage() {
               </Link>
 
               <button
-                onClick={handleGoogleLogin}
-                className="px-4 py-3 rounded-xl bg-white text-[#1f1f1f] text-center hover:bg-white/90 transition-colors shadow"
+                onClick={(e) => { if (isIOS) { e.preventDefault(); return; } handleGoogleLogin(e); }}
+                disabled={isIOS}
+                title={isIOS ? 'Google sign-in is unavailable on iOS in this launcher. Please Continue as Guest.' : undefined}
+                className={`px-4 py-3 rounded-xl text-center transition-colors shadow ${isIOS ? 'bg-white/40 text-[#1f1f1f]/60 cursor-not-allowed' : 'bg-white text-[#1f1f1f] hover:bg-white/90'}`}
               >
-                Sign in with Google
+                {isIOS ? 'Sign in with Google (unavailable on iOS)' : 'Sign in with Google'}
               </button>
 
               {/* Fallback link for no-JS or as a secondary option */}
@@ -99,7 +109,9 @@ export default function LoginPage() {
           </section>
 
           <p className="text-xs text-white/50 mt-6 text-center">
-            You can switch accounts or log out anytime from the header once signed in.
+            {isIOS
+              ? 'Google sign-in is disabled on iOS in this viewer. Continue as Guest to try the experience.'
+              : 'You can switch accounts or log out anytime from the header once signed in.'}
           </p>
         </main>
       </div>

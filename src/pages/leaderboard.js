@@ -20,7 +20,9 @@ export default function LeaderboardPage({ userName = null, entries = [], mode = 
         <header className="max-w-3xl mx-auto mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="h-10 w-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white font-bold text-lg">A</div>
+              <Link href="/" className="h-10 w-10 rounded-xl bg-white/10 border border-white/10 overflow-hidden flex items-center justify-center">
+                <img src="/logo.png" alt="Aircraft Studio" width={40} height={40} className="object-contain" />
+              </Link>
               <div>
                 <h1 className="text-xl font-semibold tracking-tight">Leaderboard</h1>
                 <p className="text-xs text-white/60">Top pilots and best runs</p>
