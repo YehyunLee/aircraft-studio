@@ -24,19 +24,32 @@ function StatsPills({ stats }) {
     aimSpreadDeg: { label: 'Spread', unit: '°', min: 4, max: 18, desc: 'Aim cone half-angle (lower = more precise).', color: 'fuchsia' },
   };
 
+  // Static color class mapping to avoid purging
+  const colorClasses = {
+    emerald: { bg: 'bg-emerald-500/15', border: 'border-emerald-400/25', text: 'text-emerald-200' },
+    cyan: { bg: 'bg-cyan-500/15', border: 'border-cyan-400/25', text: 'text-cyan-200' },
+    indigo: { bg: 'bg-indigo-500/15', border: 'border-indigo-400/25', text: 'text-indigo-200' },
+    rose: { bg: 'bg-rose-500/15', border: 'border-rose-400/25', text: 'text-rose-200' },
+    amber: { bg: 'bg-amber-500/15', border: 'border-amber-400/25', text: 'text-amber-200' },
+    fuchsia: { bg: 'bg-fuchsia-500/15', border: 'border-fuchsia-400/25', text: 'text-fuchsia-200' },
+  };
+
   const Pill = ({ k, v }) => {
     const m = meta[k];
     if (!m || typeof v !== 'number') return null;
     const open = openKey === k;
-    const c = m.color;
+    const c = colorClasses[m.color] || colorClasses.emerald;
     const value = k === 'beamWidth' ? v.toFixed(3) : (k === 'shotSpeed' ? v.toFixed(1) : v.toFixed(2));
     return (
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpenKey(open ? null : k); }}
-        className={`text-[10px] px-2 py-0.5 relative rounded-full bg-${c}-500/15 border border-${c}-400/25 text-${c}-200`}
+        className={`text-[11px] px-3 py-2 relative rounded-lg bg-white/5 border ${c.border} text-white/90 flex items-center justify-between gap-2`}
       >
-        {m.label} {value}{m.unit}
+        <span className={`flex items-center gap-1 ${c.text}`}>
+          <span className="font-medium">{m.label}</span>
+        </span>
+        <span className="text-white/80 font-mono">{value}{m.unit}</span>
         {open && (
           <div className="absolute z-50 left-1/2 -translate-x-1/2 mt-2 w-[220px] text-left rounded-lg bg-black/90 text-white/90 text-[11px] p-2 shadow-lg border border-white/10">
             <div className="font-medium mb-0.5">{m.label}</div>
@@ -48,14 +61,19 @@ function StatsPills({ stats }) {
     );
   };
 
+  // Fixed 3x2 layout: top row (Speed, Range, Cooldown), bottom row (Shot, Width, Spread)
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      <Pill k="forwardSpeed" v={s.forwardSpeed} />
-      <Pill k="beamRange" v={s.beamRange} />
-      <Pill k="cooldown" v={s.cooldown} />
-      <Pill k="shotSpeed" v={s.shotSpeed} />
-      <Pill k="beamWidth" v={s.beamWidth} />
-      <Pill k="aimSpreadDeg" v={s.aimSpreadDeg} />
+    <div className="mt-2">
+      <div className="grid grid-cols-3 gap-2">
+        <Pill k="forwardSpeed" v={s.forwardSpeed} />
+        <Pill k="beamRange" v={s.beamRange} />
+        <Pill k="cooldown" v={s.cooldown} />
+      </div>
+      <div className="grid grid-cols-3 gap-2 mt-2">
+        <Pill k="shotSpeed" v={s.shotSpeed} />
+        <Pill k="beamWidth" v={s.beamWidth} />
+        <Pill k="aimSpreadDeg" v={s.aimSpreadDeg} />
+      </div>
     </div>
   );
 }
@@ -277,13 +295,9 @@ export default function Hangar({ userName = null }) {
                          )}
                        </div>
                      </div>
- 
+
                     <div className="text-base font-medium truncate">{item.name || item.enhancedPrompt || item.originalPrompt || item.prompt}</div>
                      <div className="text-[11px] text-white/60 mt-2">{item.timestamp ? new Date(item.timestamp).toLocaleString() : (item.slugId || item.id)}</div>
-
-                     {selected && (
-                       <StatsPills stats={stats} />
-                     )}
                    </div>
  
                    <div className="flex flex-col items-end gap-2">
@@ -323,6 +337,11 @@ export default function Hangar({ userName = null }) {
                     </div>
                   </div>
                  </div>
+                 {selected && stats && (
+                   <div className="mt-3 pt-3 border-t border-white/10">
+                     <StatsPills stats={stats} />
+                   </div>
+                 )}
               </div>
               );
             })}
