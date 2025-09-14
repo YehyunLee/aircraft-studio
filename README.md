@@ -35,3 +35,153 @@ Current focus
 Notes
 -----
 This README will continue to evolve as AI integrations, image tooling, and 3D conversion features are added. For now, the project focuses on the home page and hangar UX.
+
+Physics model (current behavior)
+--------------------------------
+The current AR experience uses a kinematic motion model focused on responsiveness and mobile performance. Specifically:
+
+- No gravity is simulated at this time. Vertical velocity is damped toward zero rather than accelerated downward.
+- Forward, lateral, and vertical motion are driven by simple velocity targets with smoothing and clamping.
+- Joystick input directly influences yaw/pitch/roll and slightly adjusts the forward speed for a flyable feel.
+- There is no lift/drag/thrust integration yet; movement is not an aerodynamic simulation.
+- Collisions are not physically resolved; gameplay elements (shots, hits, explosions) are handled with lightweight checks and visuals.
+
+This is an intentional baseline to keep the AR loop smooth on phones. The roadmap includes optional gravity, basic lift, and more physical behaviors behind a performance-friendly model.
+
+AR simulation (how it works)
+-----------------------------
+The AR flow is designed to be intuitive and performant on phones:
+
+- Load a `.glb` aircraft: We import your generated 3D model and set up basic materials and colliders.
+- Detect a surface: Using the device AR APIs (e.g., ARKit/ARCore via WebXR), we detect planes (like floors or tables).
+- Anchor and scale: We place an anchor where you tap, align the aircraft to the plane, and scale it to a sensible size.
+- Lighting estimation: We adapt materials and shadows to match the real-world lighting for better realism.
+- Controls to flight: Touch/virtual joysticks map to throttle and surfaces; device orientation can optionally assist aiming/steering.
+- Simulation loop: Each frame we read device pose/anchors, update kinematic motion (no gravity), and render the result in the camera feed.
+- Effects: Simple audio, particles, and hit markers keep feedback responsive without heavy GPU cost.
+
+What we track (telemetry & state)
+---------------------------------
+To power replays, tuning, and leaderboards, we track high-level, non-sensitive data during sessions:
+
+- Session
+  - Device pose stability and frame rate (to monitor AR quality)
+  - Plane/anchor updates (for debugging placement drift)
+- Aircraft state
+  - Position, velocity, acceleration
+  - Orientation and angular rates
+  - Control inputs (throttle, elevator, aileron, rudder)
+  - Health/energy, ammo, fuel/battery (if enabled)
+- Environment
+  - No gravity currently (planned as an option); wind is also planned but not implemented
+  - Collisions and contacts (simplified for gameplay cues)
+  - Lighting estimates (coarse)
+- Gameplay
+  - Score, hits, time alive, objectives
+  - Match ID, aircraft ID/version
+
+Data schema (rough)
+-------------------
+Below are lightweight, implementation-agnostic shapes. These are intended for on-device logging and optional upload.
+
+- SessionStart
+  ```json
+  {
+    "type": "session_start",
+    "timestamp": 1699999999999,
+    "sessionId": "sess_01H...",
+    "userId": null,
+    "device": { "platform": "ios|android|web", "model": "iPhone14,2", "os": "17.5" },
+    "app": { "version": "0.1.0" },
+    "aircraft": { "id": "acft_abc123", "version": "v1", "name": "Falcon-X" },
+    "ar": { "api": "webxr|arkit|arcore", "worldAlignment": "gravity", "scale": 1.0 }
+  }
+  ```
+
+- FrameSample (sampled at 5–20 Hz)
+  ```json
+  {
+    "type": "frame_sample",
+    "timestamp": 1700000000123,
+    "sessionId": "sess_01H...",
+    "fps": 58,
+    "anchors": { "planeCount": 2, "updated": 1 },
+    "poseQuality": { "tracking": "normal|limited", "jitter": 0.003 },
+    "aircraft": {
+      "pos": { "x": 1.2, "y": 0.8, "z": -3.4 },
+      "vel": { "x": 4.1, "y": 0.0, "z": -0.3 },
+      "acc": { "x": 0.2, "y": 0.0, "z": -0.1 },
+      "oriQuat": { "x": 0.0, "y": 0.707, "z": 0.0, "w": 0.707 },
+      "angVel": { "x": 0.0, "y": 0.1, "z": 0.0 },
+      "controls": { "throttle": 0.7, "aileron": -0.15, "elevator": 0.1, "rudder": 0.0 },
+      "health": 100, "fuel": 0.82
+    },
+    "env": { "gravity": 9.81, "wind": { "x": 0.0, "y": 0.0, "z": 0.5 } }
+  }
+  ```
+
+- Collision
+  ```json
+  {
+    "type": "collision",
+    "timestamp": 1700000000456,
+    "sessionId": "sess_01H...",
+    "with": "environment|projectile|aircraft",
+    "impulse": 120.5,
+    "hitbox": "fuselage|wing_l|wing_r|tail",
+    "position": { "x": 1.0, "y": 0.7, "z": -3.0 }
+  }
+  ```
+
+- GameplayEvent
+  ```json
+  {
+    "type": "gameplay_event",
+    "timestamp": 1700000000789,
+    "sessionId": "sess_01H...",
+    "event": "hit|score|objective|respawn",
+    "detail": { "target": "bot_12", "damage": 15, "scoreDelta": 10 }
+  }
+  ```
+
+- SessionEnd
+  ```json
+  {
+    "type": "session_end",
+    "timestamp": 1700000010000,
+    "sessionId": "sess_01H...",
+    "durationMs": 250000,
+    "summary": { "kills": 2, "hits": 14, "timeAliveMs": 220000, "avgFps": 55 }
+  }
+  ```
+
+Example payloads
+----------------
+- Minimal sample for a single short run:
+  ```json
+  [
+    { "type": "session_start", "timestamp": 1700000000000, "sessionId": "sess_X", "aircraft": { "id": "acft_a", "version": "v1" }, "device": { "platform": "web" }, "ar": { "api": "webxr" } },
+    { "type": "frame_sample", "timestamp": 1700000000100, "sessionId": "sess_X", "fps": 60, "aircraft": { "pos": {"x":0,"y":1,"z":0}, "vel": {"x":0.1,"y":0,"z":0}, "oriQuat": {"x":0,"y":0,"z":0,"w":1}, "controls": {"throttle":0.4,"aileron":0,"elevator":0,"rudder":0} }, "env": {"gravity":9.81} },
+    { "type": "gameplay_event", "timestamp": 1700000000500, "sessionId": "sess_X", "event": "score", "detail": { "scoreDelta": 5 } },
+    { "type": "session_end", "timestamp": 1700000005000, "sessionId": "sess_X", "durationMs": 5000, "summary": { "kills": 0, "hits": 1, "timeAliveMs": 4800, "avgFps": 58 } }
+  ]
+  ```
+
+Storage/transport notes
+-----------------------
+- Local caching: We currently use IndexedDB only for model blobs via `src/lib/idbModels.js` (DB `aircraft-studio`, store `models`). Telemetry storage is not yet implemented; a dedicated store like `telemetry` can be added later.
+- Transport: Batched POST of arrays (e.g., 50–200 events) with backoff. Compress when possible.
+- Sampling: Frame samples at lower rate on low battery or thermal pressure.
+
+Notes on privacy and performance
+--------------------------------
+- We avoid collecting personally identifiable information (PII) in telemetry. If a future feature requires it, we will make it opt-in and clearly documented.
+- On-device processing is preferred for physics and AR alignment to minimize latency.
+- Data sampling rates are capped to protect battery life on mobile.
+
+Roadmap improvements
+--------------------
+- Richer aero: per-wing/per-control-surface coefficients, stall modeling, and compressibility at higher speeds.
+- Better collisions: simple convex hulls or per-part hitboxes.
+- Networked AR: shared anchors for multiplayer dogfights.
+- Deeper analytics: flight envelopes, trim curves, and auto-tuning suggestions from telemetry.
