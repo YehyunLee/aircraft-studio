@@ -521,7 +521,7 @@ export default function Home() {
                     {flowRunning ? (
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
-                        {flowStep === 'enhancing' && 'enchanging prompt'}
+                        {flowStep === 'enhancing' && 'Enchanging prompt'}
                         {flowStep === 'generating-image' && 'Generating image'}
                         {flowStep === 'converting-3d' && 'Converting to 3D model'}
                         {flowStep === 'done' && 'Done'}
