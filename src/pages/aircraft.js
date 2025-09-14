@@ -115,14 +115,14 @@ export default function Hangar({ userName = null }) {
   }
 
   return (
-    <div className="min-h-dvh p-6 text-white bg-[#05060a] relative">
+  <div className="min-h-dvh text-white bg-[#05060a] relative p-4 sm:p-6 lg:p-8 pb-24">
       {/* grid background (subtle line grid) */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:24px_24px]"
       />
-      <div className="relative z-10 pb-24">
-      <header className="max-w-xl mx-auto flex items-center justify-between mb-6">
+  <div className="relative z-10">
+  <header className="max-w-4xl mx-auto flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <Link href="/" className="h-10 w-10 rounded-xl bg-white/10 border border-white/10 overflow-hidden flex items-center justify-center">
             <img src="/logo.png" alt="Aircraft Studio" width={40} height={40} className="object-contain" />
@@ -143,7 +143,7 @@ export default function Hangar({ userName = null }) {
         </nav>
       </header>
 
-      <main className="max-w-xl mx-auto space-y-4">
+  <main className="max-w-4xl mx-auto space-y-4">
         {history.length === 0 ? (
           <div className="panel rounded-2xl p-6 text-center">
             <p className="mb-2">No generated aircraft yet</p>
