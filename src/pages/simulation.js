@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { getModelObjectURL } from '../lib/idbModels';
@@ -12,6 +13,8 @@ export default function Simulation() {
   const gltfCache = useRef({});
 
   const containerRef = useRef();
+  const router = useRouter();
+  const { src: srcParam, title: titleParam, modelId: modelIdParam } = router.query || {};
   const [isARSupported, setIsARSupported] = useState(false);
   const [isARActive, setIsARActive] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
@@ -90,6 +93,25 @@ export default function Simulation() {
 
     // Load available models from multiple sources
     const models = [];
+    let preselectedFromLink = null;
+    // If modelId is provided, resolve to an object URL and preselect
+    const addPreselectedFromParams = async () => {
+      if (typeof modelIdParam === 'string' && modelIdParam.length > 0) {
+        try {
+          const resolved = await getModelObjectURL(modelIdParam);
+          if (resolved) {
+            const nameFromLink = (typeof titleParam === 'string' && titleParam.length > 0) ? titleParam : 'Selected Aircraft';
+            models.unshift({ id: `id-${modelIdParam}`, name: nameFromLink, modelPath: resolved, source: 'id' });
+            preselectedFromLink = resolved;
+            urlCleanup.push(resolved);
+          }
+        } catch {}
+      } else if (typeof srcParam === 'string' && srcParam.length > 0) {
+        const nameFromLink = (typeof titleParam === 'string' && titleParam.length > 0) ? titleParam : 'Selected Aircraft';
+        models.unshift({ id: 'link', name: nameFromLink, modelPath: srcParam, source: 'link' });
+        preselectedFromLink = srcParam;
+      }
+    };
     
     // From aircraft/hangar page (jets)
     const jets = JSON.parse(localStorage.getItem('jets') || '[]');
@@ -107,7 +129,7 @@ export default function Simulation() {
     // Resolve any that have a persistent modelId from IndexedDB; otherwise use modelUrl
     // We'll collect promises to resolve object URLs
     const urlCleanup = [];
-    const resolvePromises = homeHistory.map(async (item, index) => {
+  const resolvePromises = homeHistory.map(async (item, index) => {
       if (item.modelId) {
         try {
           const url = await getModelObjectURL(item.modelId);
@@ -133,9 +155,11 @@ export default function Simulation() {
       }
     });
     
-    Promise.allSettled(resolvePromises).then(() => {
+    Promise.allSettled([addPreselectedFromParams(), ...resolvePromises]).then(() => {
       setAvailableModels(models);
-      if (models.length > 0) {
+      if (preselectedFromLink) {
+        setSelectedModel(preselectedFromLink);
+      } else if (models.length > 0) {
         setSelectedModel(models[0].modelPath);
       }
     });
@@ -1295,45 +1319,63 @@ export default function Simulation() {
               </div>
             ) : (
               <div className="space-y-4">
-                {availableModels.length > 0 ? (
+                {selectedModel ? (
                   <>
-                    <div>
-                      <label className="block text-sm text-white/70 mb-2">Select Aircraft:</label>
-                      <select 
-                        value={selectedModel}
-                        onChange={(e) => setSelectedModel(e.target.value)}
-                        className="w-full p-3 rounded-xl bg-white/10 border border-white/20 text-white"
-                      >
-                        {availableModels.map((model) => (
-                          <option key={model.id} value={model.modelPath} className="bg-gray-800">
-                            {model.name} {model.source === 'home' ? '' : '(Hangar)'}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="text-left">
+                      <div className="text-sm text-white/70 mb-1">Selected Aircraft:</div>
+                      <div className="text-base font-semibold">
+                        {availableModels.find(m => m.modelPath === selectedModel)?.name || 'Selected Aircraft'}
+                      </div>
                     </div>
-                    
                     <button
                       onClick={initAR}
                       className="w-full py-3 px-6 bg-cyan-500 hover:bg-cyan-600 rounded-xl font-semibold text-black transition-colors"
                     >
                       Enter AR
                     </button>
-                    
                     <p className="text-xs text-white/60">
                       Aircraft will appear in front of you in AR space
                     </p>
                   </>
                 ) : (
-                  <div>
-                    <p className="text-white/70 mb-4">No aircraft available</p>
-                    <p className="text-sm text-white/60 mb-2">
-                      Create aircraft from:
-                    </p>
-                    <ul className="text-xs text-white/50 text-left list-disc list-inside space-y-1">
-                      <li>Home page: Generate 3D models from images</li>
-                      <li>Hangar page: Create and manage aircraft projects</li>
-                    </ul>
-                  </div>
+                  availableModels.length > 0 ? (
+                    <>
+                      <div>
+                        <label className="block text-sm text-white/70 mb-2">Select Aircraft:</label>
+                        <select 
+                          value={selectedModel}
+                          onChange={(e) => setSelectedModel(e.target.value)}
+                          className="w-full p-3 rounded-xl bg-white/10 border border-white/20 text-white"
+                        >
+                          {availableModels.map((model) => (
+                            <option key={model.id} value={model.modelPath} className="bg-gray-800">
+                              {model.name} {model.source === 'home' ? '(Generated)' : '(Hangar)'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={initAR}
+                        className="w-full py-3 px-6 bg-cyan-500 hover:bg-cyan-600 rounded-xl font-semibold text-black transition-colors"
+                      >
+                        Enter AR
+                      </button>
+                      <p className="text-xs text-white/60">
+                        Aircraft will appear in front of you in AR space
+                      </p>
+                    </>
+                  ) : (
+                    <div>
+                      <p className="text-white/70 mb-4">No aircraft available</p>
+                      <p className="text-sm text-white/60 mb-2">
+                        Create aircraft from:
+                      </p>
+                      <ul className="text-xs text-white/50 text-left list-disc list-inside space-y-1">
+                        <li>Home page: Generate 3D models from images</li>
+                        <li>Hangar page: Create and manage aircraft projects</li>
+                      </ul>
+                    </div>
+                  )
                 )}
               </div>
             )}

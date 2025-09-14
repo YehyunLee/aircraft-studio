@@ -570,7 +570,11 @@ export default function Home() {
                                 👁 Quick Preview
                               </button>
                               <Link
-                                href={`/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || "3D Model")}`}
+                                href={(currentModelUrl && currentModelUrl.startsWith('http'))
+                                  ? `/simulation?src=${encodeURIComponent(currentModelUrl)}&title=${encodeURIComponent(enhancedPrompt || prompt || '3D Model')}`
+                                  : (generationHistory[selectedHistoryIndex]?.modelId
+                                      ? `/simulation?modelId=${encodeURIComponent(generationHistory[selectedHistoryIndex].modelId)}&title=${encodeURIComponent(enhancedPrompt || prompt || '3D Model')}`
+                                      : '/simulation')}
                                 className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
                               >
                                 🎮 AR Simulation
@@ -647,8 +651,17 @@ export default function Home() {
                                   <button
                                     onClick={async (e) => {
                                       e.stopPropagation();
+                                      // Prefer http URLs; otherwise pass modelId
+                                      if (item.modelUrl && item.modelUrl.startsWith('http')) {
+                                        window.location.href = `/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.name || item.originalPrompt || '3D Model')}`;
+                                        return;
+                                      }
+                                      if (item.modelId) {
+                                        window.location.href = `/simulation?modelId=${encodeURIComponent(item.modelId)}&title=${encodeURIComponent(item.name || item.originalPrompt || '3D Model')}`;
+                                        return;
+                                      }
                                       const url = await resolveHistoryModelUrl(item);
-                                      if (url) window.location.href = `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.name || item.originalPrompt || "3D Model")}`;
+                                      if (url) window.location.href = `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.name || item.originalPrompt || '3D Model')}`;
                                     }}
                                     className="text-xs text-cyan-300 hover:text-cyan-200 transition-colors px-2 py-1 rounded hover:bg-cyan-300/20"
                                     title="AR Preview"

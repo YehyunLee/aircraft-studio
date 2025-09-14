@@ -66,23 +66,24 @@ export default function Hangar() {
 
   async function getPreviewHref(item) {
     // Prefer explicit URL
-    if (item.modelUrl) return `/preview?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
+    if (item.modelUrl) return `/preview?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.name || item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
     if (item.modelId) {
       try {
         const url = await getModelObjectURL(item.modelId);
-        if (url) return `/preview?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
+        if (url) return `/preview?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.name || item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
       } catch {}
     }
     return "#";
   }
 
-  async function getSimulationHref(item) {
-    if (item.modelUrl) return `/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
+  function getSimulationHref(item) {
+    // Prefer persistent http(s) URLs; otherwise pass modelId to resolve in simulation
+    const title = encodeURIComponent(item.name || item.enhancedPrompt || item.originalPrompt || "3D Model");
+    if (item.modelUrl && typeof item.modelUrl === 'string' && item.modelUrl.startsWith('http')) {
+      return `/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${title}`;
+    }
     if (item.modelId) {
-      try {
-        const url = await getModelObjectURL(item.modelId);
-        if (url) return `/simulation?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
-      } catch {}
+      return `/simulation?modelId=${encodeURIComponent(item.modelId)}&title=${title}`;
     }
     return "/simulation";
   }
@@ -95,7 +96,7 @@ export default function Hangar() {
 
   async function onSimulationClick(e, item) {
     e.stopPropagation();
-    const href = await getSimulationHref(item);
+    const href = getSimulationHref(item);
     if (href) router.push(href);
   }
 
