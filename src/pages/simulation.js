@@ -276,11 +276,9 @@ export default function Simulation() {
       scene.add(directionalLight);
 
       // Request AR session
-      // Use a robust overlay root; some iOS WebXR implementations prefer document.body
-      const overlayRoot = document.getElementById('ar-ui-container') || document.body;
       const session = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['local-floor', 'dom-overlay'],
-        domOverlay: { root: overlayRoot },
+        domOverlay: { root: document.getElementById('ar-ui-container') },
       });
       
       sessionRef.current = session;
@@ -1511,7 +1509,7 @@ export default function Simulation() {
         </div>
       )}
       
-      <div id="ar-ui-container" className="ar-overlay-root">
+      <div id="ar-ui-container">
         {/* HUD off-screen indicator */}
         <div ref={hudRef} id="hud-indicator" className="hud-indicator" style={{display: 'none'}}>
           <div className="hud-arrow">▸</div>
@@ -1585,7 +1583,7 @@ export default function Simulation() {
         )}
 
         {showLeaderboard && (
-          <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/60">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60">
             <div className="glass rounded-2xl p-6 w-full max-w-md text-left">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xl font-semibold">Leaderboard</h2>
@@ -1615,20 +1613,10 @@ export default function Simulation() {
       </div>
 
       <style jsx>{`
-        /* XR DOM Overlay root: fill the viewport; allow controls to work in iOS */
-        .ar-overlay-root {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          pointer-events: none; /* don't block page by default */
-        }
-
         .glass {
           background: rgba(255, 255, 255, 0.03);
           backdrop-filter: blur(10px);
           border: 1px solid rgba(255, 255, 255, 0.1);
-          pointer-events: auto; /* allow interaction inside overlay */
         }
         .joystick-btn {
           position: absolute;
@@ -1644,7 +1632,6 @@ export default function Simulation() {
           touch-action: none; /* ensure pointer/touch events fire immediately */
           cursor: pointer;
           z-index: 50;
-          pointer-events: auto; /* interactive within overlay */
         }
         .joystick-btn:active {
           background: rgba(255, 255, 255, 0.4);
@@ -1665,7 +1652,6 @@ export default function Simulation() {
           user-select: none;
           touch-action: none;
           z-index: 55;
-          pointer-events: auto; /* interactive within overlay */
         }
         .shoot-btn:active {
           transform: scale(0.98);
@@ -1673,7 +1659,7 @@ export default function Simulation() {
         }
         /* HUD indicator */
         .hud-indicator {
-          position: absolute;
+          position: fixed;
           z-index: 60;
           width: 56px;
           height: 56px;
