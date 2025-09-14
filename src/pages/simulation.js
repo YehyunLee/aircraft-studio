@@ -17,6 +17,7 @@ export default function Simulation() {
   const { src: srcParam, title: titleParam, modelId: modelIdParam, instantWebxr } = router.query || {};
   const [isARSupported, setIsARSupported] = useState(false);
   const [isARActive, setIsARActive] = useState(false);
+  const [overlayUsesBody, setOverlayUsesBody] = useState(false); // if true, make page bg transparent
   const [selectedModel, setSelectedModel] = useState('');
   const [availableModels, setAvailableModels] = useState([]);
   const [error, setError] = useState('');
@@ -276,14 +277,42 @@ export default function Simulation() {
       scene.add(directionalLight);
 
       // Request AR session
-      const session = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['local-floor', 'dom-overlay'],
-        domOverlay: { root: document.getElementById('ar-ui-container') },
-      });
+      // iOS (Safari + Launch viewers) prefers document.body as dom-overlay root.
+      // Android Chrome works best with a specific element root to avoid page backgrounds covering the camera feed.
+      const isIOS = (() => {
+        try {
+          const ua = navigator.userAgent || '';
+          const isApple = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+          return !!isApple;
+        } catch { return false; }
+      })();
+      const elementRoot = document.getElementById('ar-ui-container');
+      const chosenRoot = isIOS ? document.body : (elementRoot || document.body);
+      const sessionInit = {
+        requiredFeatures: ['local-floor'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: chosenRoot },
+      };
+      const session = await navigator.xr.requestSession('immersive-ar', sessionInit);
       
       sessionRef.current = session;
 
       await renderer.xr.setSession(session);
+
+      // Warn if dom-overlay isn't actually enabled so we can still position UI
+      try {
+        const hasDomOverlay = session.domOverlayState && session.domOverlayState.type;
+        if (!hasDomOverlay) {
+          console.warn('WebXR dom-overlay not active; using fixed overlay container for UI on top of canvas.');
+        }
+        // Ensure overlay container exists and is visible
+        const overlayEl = document.getElementById('ar-ui-container');
+        if (overlayEl) {
+          overlayEl.style.display = '';
+        }
+        // Record whether we used body as overlay root so we can make page background transparent
+        setOverlayUsesBody(chosenRoot === document.body);
+      } catch (_) {}
 
       // Handle session end
       session.addEventListener('end', () => {
@@ -1368,6 +1397,7 @@ export default function Simulation() {
     } catch (e) {}
     shotsRef.current = [];
     setIsARActive(false);
+    try { setOverlayUsesBody(false); } catch (_) {}
     setIsLoadingModel(false);
     setError('');
     try { setEnemiesRemaining(0); } catch (_) {}
@@ -1380,7 +1410,7 @@ export default function Simulation() {
   };
 
   return (
-    <div className="min-h-dvh bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white">
+  <div className="min-h-dvh bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white" style={{ background: (isARActive && overlayUsesBody) ? 'transparent' : undefined }}>
       <div ref={containerRef} className="w-full h-dvh absolute top-0 left-0" />
       
       {!isARActive && (
@@ -1613,6 +1643,16 @@ export default function Simulation() {
       </div>
 
       <style jsx>{`
+        /* Ensure AR UI overlay container fills screen and stays above WebXR canvas */
+        #ar-ui-container {
+          position: fixed;
+          inset: 0;
+          z-index: 40; /* below modals, above renderer */
+          pointer-events: none; /* let children opt-in */
+        }
+        #ar-ui-container * {
+          -webkit-tap-highlight-color: transparent; /* iOS tap highlight */
+        }
         .glass {
           background: rgba(255, 255, 255, 0.03);
           backdrop-filter: blur(10px);
@@ -1629,9 +1669,10 @@ export default function Simulation() {
           font-size: 1.6rem;
           color: white;
           user-select: none;
-          touch-action: none; /* ensure pointer/touch events fire immediately */
+          touch-action: manipulation; /* iOS: allow quick taps without delay */
           cursor: pointer;
           z-index: 50;
+          pointer-events: auto; /* re-enable on interactive controls */
         }
         .joystick-btn:active {
           background: rgba(255, 255, 255, 0.4);
@@ -1650,8 +1691,9 @@ export default function Simulation() {
           backdrop-filter: blur(6px);
           cursor: pointer;
           user-select: none;
-          touch-action: none;
+          touch-action: manipulation;
           z-index: 55;
+          pointer-events: auto;
         }
         .shoot-btn:active {
           transform: scale(0.98);
@@ -1684,6 +1726,13 @@ export default function Simulation() {
         .hud-distance {
           font-size: 11px;
           opacity: 0.9;
+        }
+        /* Ensure top bar and buttons in AR can receive input */
+        #ar-ui-container button {
+          pointer-events: auto;
+        }
+        #joystick-container {
+          pointer-events: none; /* container transparent */
         }
       `}</style>
     </div>
