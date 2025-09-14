@@ -431,7 +431,7 @@ export default function Home() {
             <section className="glass-card rounded-3xl p-8 mb-8 text-center">
               <div className="max-w-2xl mx-auto">
                 <h2 className="text-3xl sm:text-4xl font-bold leading-tight mb-3">Design & Simulate</h2>
-                <p className="text-sm text-white/70 mb-6">Taste future of engineering:<br />Design 3D aircraft using AI, simulate piloting in AR.</p>
+                <p className="text-sm text-white/70 mb-6">Taste future of engineering:<br />Design 3D aircraft using AI, simulate piloting them in AR.</p>
 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center mb-6">
                   <button
@@ -516,10 +516,10 @@ export default function Home() {
                 </div>
 
                 {/* Combined Output Card: AI Prompt + Image/Model */}
-                {(enhancedPrompt || currentImageUrl) && (
+                {(flowRunning || enhancedPrompt || currentImageUrl) && (
                   <section className="glass-card rounded-2xl p-6">
                     <div className="space-y-4">
-                      {enhancedPrompt && (
+                      {enhancedPrompt ? (
                         <div className="p-4 rounded-xl bg-gradient-to-r from-violet-500/10 to-violet-600/10 border border-violet-500/30">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-violet-400">✨</span>
@@ -527,8 +527,19 @@ export default function Home() {
                           </div>
                           <p className="text-sm text-white/90 leading-relaxed">{enhancedPrompt}</p>
                         </div>
+                      ) : (
+                        flowRunning && flowStep === 'enhancing' && (
+                          <div className="p-4 rounded-xl bg-gradient-to-r from-violet-500/10 to-violet-600/10 border border-violet-500/30 animate-pulse">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-4 h-4 border-2 border-violet-300/40 border-t-violet-300 rounded-full animate-spin" />
+                              <p className="text-sm font-semibold text-violet-300/80">Enhancing prompt…</p>
+                            </div>
+                            <div className="h-3 w-3/4 bg-white/20 rounded mb-2"></div>
+                            <div className="h-3 w-2/3 bg-white/15 rounded"></div>
+                          </div>
+                        )
                       )}
-                      {currentImageUrl && (
+                      {currentImageUrl ? (
                         <div className="space-y-4">
                           <div className="relative rounded-xl overflow-hidden bg-white/5 border border-white/10">
                             <img
@@ -537,6 +548,12 @@ export default function Home() {
                               className="w-full h-auto"
                             />
                           </div>
+                          {flowRunning && flowStep === 'converting-3d' && !currentModelUrl && (
+                            <div className="flex items-center gap-2 text-white/80 text-sm">
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              <span>Converting to 3D…</span>
+                            </div>
+                          )}
                           {currentModelUrl ? (
                             <div className="flex flex-col sm:flex-row gap-3">
                               <button
@@ -558,6 +575,18 @@ export default function Home() {
                             </div>
                           ) : null}
                         </div>
+                      ) : (
+                        flowRunning && flowStep === 'generating-image' && (
+                          <div className="space-y-3">
+                            <div className="relative rounded-xl overflow-hidden bg-white/5 border border-white/10">
+                              <div className="w-full h-64 bg-white/10 animate-pulse" />
+                            </div>
+                            <div className="flex items-center gap-2 text-white/80 text-sm">
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              <span>Rendering image…</span>
+                            </div>
+                          </div>
+                        )
                       )}
                     </div>
                   </section>
@@ -578,38 +607,95 @@ export default function Home() {
 
             {/* Current Generation Display merged above */}
 
-            {/* Generation History removed; see Hangar page for browsing history */}
-          </div>
-        )}
-      </main>
+                  </div>
+                )}
+                </main>
 
-      <footer className="max-w-4xl mx-auto mt-12 text-center">
-        <p className="text-sm text-white/50 mb-2">Powered by</p>
-        <div className="flex justify-center items-center gap-4 text-xs text-white/40">
-          <span>Auth0</span>
-          <span>•</span>
-          <span>MongoDB</span>
-          <span>•</span>
-          <span>Groq</span>
-          <span>•</span>
-          <span>Flux 1</span>
-          <span>•</span>
-          <span>Spar 3D</span>
-        </div>
-      </footer>
-      </div>
-      <BottomNav />
+                <footer className="max-w-4xl mx-auto mt-12 text-center">
+                <p className="text-sm text-white/50 mb-2">Made with</p>
 
-      <style jsx>{`
-        .glass-card {
-          background: rgba(255, 255, 255, 0.05);
-          backdrop-filter: blur(20px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-      `}</style>
+                {/* Horizontal moving credits (marquee-style) */}
+                <div className="w-full overflow-hidden">
+                  <div className="marquee-track" aria-hidden="true">
+                  <div className="marquee-content">
+                    <span>Auth0</span>
+                    <span className="sep">•</span>
+                    <span>MongoDB</span>
+                    <span className="sep">•</span>
+                    <span>Groq</span>
+                    <span className="sep">•</span>
+                    <span>Windsurf</span>
+                    <span className="sep">•</span>
+                    <span>Flux 1</span>
+                    <span className="sep">•</span>
+                    <span>Spar 3D</span>
+                    <span className="sep">•</span>
+                  </div>
 
-      {/* 3D Preview Modal */}
+                  {/* duplicate content for seamless loop */}
+                  <div className="marquee-content">
+                    <span>Auth0</span>
+                    <span className="sep">•</span>
+                    <span>MongoDB</span>
+                    <span className="sep">•</span>
+                    <span>Groq</span>
+                    <span className="sep">•</span>
+                    <span>Windsurf</span>
+                    <span className="sep">•</span>
+                    <span>Flux 1</span>
+                    <span className="sep">•</span>
+                    <span>Spar 3D</span>
+                    <span className="sep">•</span>
+                  </div>
+                  </div>
+                </div>
+                </footer>
+                </div>
+                <BottomNav />
+
+                <style jsx>{`
+                .glass-card {
+                  background: rgba(255, 255, 255, 0.05);
+                  backdrop-filter: blur(20px);
+                  border: 1px solid rgba(255, 255, 255, 0.1);
+                  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                }
+
+                /* Marquee styles */
+                .marquee-track {
+                  display: flex;
+                  gap: 2rem;
+                  align-items: center;
+                  /* The total width of the two marquee-content blocks will be animated */
+                  animation: marquee 18s linear infinite;
+                  will-change: transform;
+                }
+
+                .marquee-content {
+                  display: inline-flex;
+                  gap: 1rem;
+                  padding: 0.5rem 0;
+                  color: rgba(255,255,255,0.4);
+                  font-size: 0.75rem;
+                  white-space: nowrap;
+                }
+
+                .marquee-content .sep {
+                  opacity: 0.5;
+                }
+
+                @keyframes marquee {
+                  from { transform: translateX(0); }
+                  to   { transform: translateX(-50%); }
+                }
+
+                /* Reduce motion for users who prefer it */
+                @media (prefers-reduced-motion: reduce) {
+                  .marquee-track { animation: none; }
+                }
+                `}</style>
+
+                {/* 3D Preview Modal */}
       {previewModel && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="w-full max-w-4xl glass-card rounded-2xl overflow-hidden">
