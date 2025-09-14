@@ -1093,7 +1093,7 @@ export default function Simulation() {
   const closeLeaderboardAndExit = () => {
     try { setShowLeaderboard(false); } catch (_) {}
     try { exitAR(); } catch (_) {}
-    try { router.push('/aircraft'); } catch (_) {}
+    try { router.push('/leaderboard'); } catch (_) {}
   };
 
   const placeAircraft = async () => {

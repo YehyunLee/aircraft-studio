@@ -53,6 +53,12 @@ export default function LeaderboardPage({ userName = null, entries = [] }) {
                       <div className="min-w-0">
                         <div className="font-medium truncate">{e.name}</div>
                         <div className="text-xs text-white/50 truncate">{e.modelName || 'Any Aircraft'}</div>
+                        <div className="text-xs text-white/50 truncate mt-0.5">
+                          Enemies: {e.enemiesDestroyed ?? 0} • Hits: {e.hits ?? 0} / Shots: {e.shotsFired ?? 0}
+                          {typeof e.accuracy === 'number' && (
+                            <> • Acc: {Math.round(e.accuracy * 100)}%</>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right">
@@ -87,24 +93,31 @@ export async function getServerSideProps(context) {
   try {
     const session = await auth0.getSession(context.req);
     const userName = session?.user?.name || null;
-    // Fetch top global leaderboard from our API route on the server
-    const proto = (context.req.headers['x-forwarded-proto'] || '').toString() || 'http';
-    const host = context.req.headers.host;
-    const baseUrl = process.env.APP_BASE_URL || `${proto}://${host}`;
-    const resp = await fetch(`${baseUrl}/api/leaderboard/top?limit=50&sort=score`);
-    let entries = [];
-    if (resp.ok) {
-      const json = await resp.json();
-      if (json && json.ok && Array.isArray(json.entries)) {
-        entries = json.entries.map((it, idx) => ({
-          id: idx,
-          name: it?.user?.name || 'Anonymous',
-          score: it?.score || 0,
-          clearTime: it?.clearTime ?? null,
-          modelName: it?.model?.name || null,
-        }));
-      }
-    }
+
+    // Import server-only DB helper here to keep it out of the client bundle
+    const { getDb } = await import("@/lib/mongodb");
+
+    // Query MongoDB directly (avoids self-signed HTTPS issues in dev)
+    const db = await getDb();
+    const leaderboard = db.collection('leaderboard');
+    const docs = await leaderboard
+      .find({}, { projection: { _id: 0 } })
+      .sort({ score: -1, clearTime: 1 })
+      .limit(50)
+      .toArray();
+
+    const entries = (docs || []).map((it, idx) => ({
+      id: idx,
+      name: it?.user?.name || 'Anonymous',
+      score: it?.score || 0,
+      clearTime: it?.clearTime ?? null,
+      modelName: it?.model?.name || null,
+      enemiesDestroyed: it?.enemiesDestroyed ?? null,
+      shotsFired: it?.shotsFired ?? null,
+      hits: it?.hits ?? null,
+      accuracy: typeof it?.accuracy === 'number' ? it.accuracy : null,
+    }));
+
     return { props: { userName, entries } };
   } catch (e) {
     return { props: { userName: null, entries: [] } };

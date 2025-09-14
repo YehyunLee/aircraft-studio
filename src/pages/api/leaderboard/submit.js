@@ -2,16 +2,25 @@ import { auth0 } from '@/lib/auth0';
 import { getDb } from '@/lib/mongodb';
 
 // POST { score, clearTime, enemiesDestroyed, shotsFired, hits, modelName?, modelId?, modelPath? }
-export default auth0.withApiAuthRequired(async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    const { user } = await auth0.getSession(req);
-    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    // Try to read session if present, but do not require it (allow anonymous submissions)
+    let sessionUser = null;
+    try {
+      const sess = await auth0.getSession(req);
+      sessionUser = sess?.user || null;
+    } catch (_) {}
 
     const { score = 0, clearTime = null, enemiesDestroyed = 0, shotsFired = 0, hits = 0, modelName = null, modelId = null, modelPath = null } = req.body || {};
 
-    // Compute accuracy & basic validations
-    const accuracy = shotsFired > 0 ? Math.min(1, Math.max(0, hits / shotsFired)) : 0;
+    // Basic validation + normalization
+    const normScore = Number.isFinite(Number(score)) ? Number(score) : 0;
+    const normClearTime = clearTime == null ? null : (Number.isFinite(Number(clearTime)) ? Number(clearTime) : null);
+    const normEnemies = Number.isFinite(Number(enemiesDestroyed)) ? Number(enemiesDestroyed) : 0;
+    const normShots = Number.isFinite(Number(shotsFired)) ? Number(shotsFired) : 0;
+    const normHits = Number.isFinite(Number(hits)) ? Number(hits) : 0;
+    const accuracy = normShots > 0 ? Math.min(1, Math.max(0, normHits / normShots)) : 0;
 
     const db = await getDb();
     const leaderboard = db.collection('leaderboard');
@@ -22,16 +31,20 @@ export default auth0.withApiAuthRequired(async function handler(req, res) {
     await leaderboard.createIndex({ 'user.sub': 1 });
 
     const doc = {
-      user: {
-        sub: user.sub,
-        name: user.name || user.nickname || user.email || 'Anonymous',
-        picture: user.picture || null,
+      user: sessionUser ? {
+        sub: sessionUser.sub,
+        name: sessionUser.name || sessionUser.nickname || sessionUser.email || 'Anonymous',
+        picture: sessionUser.picture || null,
+      } : {
+        sub: null,
+        name: 'Anonymous',
+        picture: null,
       },
-      score: Number(score) || 0,
-      clearTime: clearTime == null ? null : Number(clearTime),
-      enemiesDestroyed: Number(enemiesDestroyed) || 0,
-      shotsFired: Number(shotsFired) || 0,
-      hits: Number(hits) || 0,
+      score: Math.max(0, Math.floor(normScore)),
+      clearTime: normClearTime,
+      enemiesDestroyed: Math.max(0, Math.floor(normEnemies)),
+      shotsFired: Math.max(0, Math.floor(normShots)),
+      hits: Math.max(0, Math.floor(normHits)),
       accuracy,
       model: {
         id: modelId || null,
@@ -42,10 +55,9 @@ export default auth0.withApiAuthRequired(async function handler(req, res) {
     };
 
     await leaderboard.insertOne(doc);
-
     res.status(200).json({ ok: true, inserted: true });
   } catch (e) {
     console.error('submit leaderboard error', e);
     res.status(500).json({ error: 'Internal error' });
   }
-});
+}

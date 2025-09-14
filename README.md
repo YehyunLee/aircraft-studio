@@ -53,7 +53,7 @@ We use MongoDB Atlas (or a local MongoDB) for the global leaderboard.
 Environment variables (add to `.env.local`):
 
 - `MONGODB_URI` — e.g. `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/?retryWrites=true&w=majority`
-- `MONGODB_DB` — database name, e.g. `aircraftstudio`
+- `MONGODB_DB` — database name, e.g. `aircraft-studio`
 - `NEXT_PUBLIC_BASE_URL` — for SSR fetching, e.g. `https://localhost:3000`
 
 Install dependency:

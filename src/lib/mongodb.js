@@ -3,7 +3,7 @@
 import { MongoClient } from 'mongodb';
 
 const uri = process.env.MONGODB_URI;
-const dbName = process.env.MONGODB_DB || 'aircraftstudio';
+const dbName = process.env.MONGODB_DB || 'aircraft-studio';
 
 if (!uri) {
   console.warn('MONGODB_URI is not set. API routes depending on MongoDB will fail.');
