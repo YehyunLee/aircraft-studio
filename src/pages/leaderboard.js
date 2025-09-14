@@ -24,14 +24,18 @@ export default function LeaderboardPage({ userName = null, entries = [], mode = 
                 <img src="/logo.png" alt="Aircraft Studio" width={40} height={40} className="object-contain" />
               </Link>
               <div>
-                <h1 className="text-xl font-semibold tracking-tight">Leaderboard</h1>
+                <Link href="/" className="block">
+                  <h1 className="text-xl font-semibold tracking-tight hover:underline">Leaderboard</h1>
+                </Link>
                 <p className="text-xs text-white/60">Top pilots and best runs</p>
               </div>
             </div>
             <nav className="flex items-center gap-4">
-              <Link href="/" className="text-sm text-white/80 hover:text-white transition-colors">Home</Link>
               {userName ? (
-                <span className="text-sm text-white/70">{userName}</span>
+                <>
+                  <span className="text-sm text-white/80">{userName}</span>
+                  <a href="/auth/logout" target="_top" rel="noopener" className="text-sm text-white/80 hover:text-white transition-colors">Logout</a>
+                </>
               ) : (
                 <Link href="/login" target="_top" className="text-sm text-white/80 hover:text-white transition-colors">Login</Link>
               )}

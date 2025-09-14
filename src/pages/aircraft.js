@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { auth0 } from "@/lib/auth0";
 import { useRouter } from "next/router";
 import BottomNav from "@/components/BottomNav";
 
 // Hangar now shows a flat list of previously generated aircraft (generationHistory)
-export default function Hangar() {
+export default function Hangar({ userName = null }) {
   const [history, setHistory] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const router = useRouter();
@@ -122,8 +123,24 @@ export default function Hangar() {
       />
       <div className="relative z-10 pb-24">
       <header className="max-w-xl mx-auto flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">Hangar</h1>
-        <Link href="/" className="rounded-xl px-3 py-2 bg-white/10 border border-white/10 text-sm hover:bg-white/15 transition">Back</Link>
+        <div className="flex items-center gap-4">
+          <Link href="/" className="h-10 w-10 rounded-xl bg-white/10 border border-white/10 overflow-hidden flex items-center justify-center">
+            <img src="/logo.png" alt="Aircraft Studio" width={40} height={40} className="object-contain" />
+          </Link>
+          <Link href="/" className="block">
+            <h1 className="text-xl font-semibold tracking-tight hover:underline">Hangar</h1>
+          </Link>
+        </div>
+        <nav className="flex items-center gap-4">
+          {userName ? (
+            <>
+              <span className="text-sm text-white/80">{userName}</span>
+              <a href="/auth/logout" target="_top" rel="noopener" className="text-sm text-white/80 hover:text-white transition-colors">Logout</a>
+            </>
+          ) : (
+            <Link href="/login" target="_top" className="text-sm text-white/80 hover:text-white transition-colors">Login</Link>
+          )}
+        </nav>
       </header>
 
       <main className="max-w-xl mx-auto space-y-4">
@@ -210,4 +227,14 @@ export default function Hangar() {
       `}</style>
     </div>
   );
+}
+
+export async function getServerSideProps(context) {
+  try {
+    const session = await auth0.getSession(context.req);
+    const userName = session?.user?.name || null;
+    return { props: { userName } };
+  } catch (e) {
+    return { props: { userName: null } };
+  }
 }
