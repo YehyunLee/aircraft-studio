@@ -367,7 +367,7 @@ export default function Simulation() {
 
             // --- Forward speed: use a small negative z (convention: negative z == forward)
             // Start from current forward velocity and smoothly approach a base cruise speed.
-            const baseForward = -0.75; // tuned to be slower than previous value
+            const baseForward = -0.88; // slightly faster base forward cruise
             // Smoothly lerp toward base forward speed so changes are not instant
             velocity.current.z = THREE.MathUtils.lerp(velocity.current.z || 0, baseForward, 0.08);
 
@@ -388,7 +388,7 @@ export default function Simulation() {
             // Clamp lateral/vertical speed so movement doesn't blow up
             velocity.current.x = THREE.MathUtils.clamp(velocity.current.x, -0.9, 0.9);
             velocity.current.y = THREE.MathUtils.clamp(velocity.current.y, -0.6, 0.6);
-            velocity.current.z = THREE.MathUtils.clamp(velocity.current.z, -1.5, -0.3);
+            velocity.current.z = THREE.MathUtils.clamp(velocity.current.z, -1.7, -0.25);
 
             // --- Rotation: use joystick input directly to pivot (yaw) and bank (roll)
             // This makes a left/right joystick tap cause an immediate pivot into the turn
@@ -1440,7 +1440,7 @@ export default function Simulation() {
                   // Simple controller attached directly to the object
                   const controller = (() => {
                     // Simple wandering controller with avoidance
-                    const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.04, -0.5 - Math.random() * 0.6);
+                    const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.22, (Math.random() - 0.5) * 0.05, -0.62 - Math.random() * 0.72);
                     const forward = new THREE.Vector3();
                     const tmp = new THREE.Vector3();
                     const radius = 0.6;
@@ -1457,7 +1457,7 @@ export default function Simulation() {
                         if (dist > 0.001) {
                           tmp.normalize();
                           // desired speed scales slightly with distance
-                          const desiredSpeed = THREE.MathUtils.clamp(0.6 + dist * 0.08, 0.4, 2.2);
+                          const desiredSpeed = THREE.MathUtils.clamp(0.6 + dist * 0.085, 0.45, 2.5);
                           tmp.multiplyScalar(desiredSpeed);
 
                           // steering = desired - current velocity
@@ -1479,7 +1479,7 @@ export default function Simulation() {
                       // Limit speeds
                       velocity.x = THREE.MathUtils.clamp(velocity.x, -1.6, 1.6);
                       velocity.y = THREE.MathUtils.clamp(velocity.y, -1.0, 1.0);
-                      velocity.z = THREE.MathUtils.clamp(velocity.z, -3.0, -0.15);
+                      velocity.z = THREE.MathUtils.clamp(velocity.z, -3.4, -0.12);
 
                       // Simple collision avoidance: repel from nearby enemies
                       for (let j = 0; j < allEnemies.length; ++j) {
