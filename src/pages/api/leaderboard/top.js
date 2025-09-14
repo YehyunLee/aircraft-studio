@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     const sort = sortBy === 'time' ? { clearTime: 1, score: -1 } : { score: -1, clearTime: 1 };
 
     const docs = await leaderboard
-      .find({}, { projection: { _id: 0 } })
+      .find({ 'user.sub': { $ne: null } }, { projection: { _id: 0 } })
       .sort(sort)
       .limit(limit)
       .toArray();

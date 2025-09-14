@@ -122,13 +122,14 @@ export async function getServerSideProps(context) {
 
     if (mode === 'all') {
       docs = await leaderboard
-        .find({}, { projection: { _id: 0 } })
+        .find({ 'user.sub': { $ne: null } }, { projection: { _id: 0 } })
         .sort({ score: -1, clearTime: 1, createdAt: 1 })
         .limit(100)
         .toArray();
     } else {
       // Best run per user: prefer Auth0 sub; fallback to user name
       const pipeline = [
+        { $match: { 'user.sub': { $ne: null } } },
         { $addFields: { userKey: { $ifNull: [ '$user.sub', '$user.name' ] } } },
         { $sort: { score: -1, clearTime: 1, createdAt: 1 } },
         { $group: { _id: '$userKey', doc: { $first: '$$ROOT' } } },

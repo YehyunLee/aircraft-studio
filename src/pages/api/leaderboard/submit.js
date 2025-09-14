@@ -5,12 +5,12 @@ import { getDb } from '@/lib/mongodb';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
-    // Try to read session if present, but do not require it (allow anonymous submissions)
-    let sessionUser = null;
-    try {
-      const sess = await auth0.getSession(req);
-      sessionUser = sess?.user || null;
-    } catch (_) {}
+    // Require an authenticated session; anonymous submissions are not allowed
+    const sess = await auth0.getSession(req);
+    const sessionUser = sess?.user || null;
+    if (!sessionUser?.sub) {
+      return res.status(401).json({ ok: false, inserted: false, error: 'Authentication required' });
+    }
 
     const { score = 0, clearTime = null, enemiesDestroyed = 0, shotsFired = 0, hits = 0, modelName = null, modelId = null, modelPath = null } = req.body || {};
 
@@ -31,14 +31,10 @@ export default async function handler(req, res) {
     await leaderboard.createIndex({ 'user.sub': 1 });
 
     const doc = {
-      user: sessionUser ? {
+      user: {
         sub: sessionUser.sub,
-        name: sessionUser.name || sessionUser.nickname || sessionUser.email || 'Anonymous',
+        name: sessionUser.name || sessionUser.nickname || sessionUser.email || 'User',
         picture: sessionUser.picture || null,
-      } : {
-        sub: null,
-        name: 'Anonymous',
-        picture: null,
       },
       score: Math.max(0, Math.floor(normScore)),
       clearTime: normClearTime,
