@@ -6,13 +6,14 @@ export default function BottomNav() {
   const items = [
     { href: "/", label: "Craft", icon: CraftIcon },
     { href: "/aircraft", label: "Hangar", icon: HangarIcon },
+    { href: "/login", label: "Login", icon: AccountIcon },
   ];
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50">
       <div className="mx-auto max-w-xl px-4 pb-[calc(env(safe-area-inset-bottom))]">
         <div className="glass-nav rounded-2xl mb-3 border border-white/10 bg-black/60 backdrop-blur-md">
-          <ul className="grid grid-cols-2">
+          <ul className="grid grid-cols-3">
             {items.map(({ href, label, icon: Icon }) => {
               const active = router.pathname === href;
               return (
@@ -55,6 +56,15 @@ function HangarIcon({ className = "" }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M3 9l9-5 9 5v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
       <path d="M9 21V9h6v12" />
+    </svg>
+  );
+}
+
+function AccountIcon({ className = "" }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5z" />
+      <path d="M3 22a9 9 0 0 1 18 0" />
     </svg>
   );
 }

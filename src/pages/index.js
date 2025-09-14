@@ -5,8 +5,9 @@ import Head from "next/head";
 import Script from "next/script";
 import { saveModelBlob, getModelObjectURL } from "../lib/idbModels";
 import BottomNav from "@/components/BottomNav";
+import { auth0 } from "@/lib/auth0";
 
-export default function Home() {
+export default function Home({ userName = null }) {
   const [prompt, setPrompt] = useState("");
   const [enhancedPrompt, setEnhancedPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -418,8 +419,14 @@ export default function Home() {
             </div>
           </div>
           <nav className="flex items-center gap-4">
-            <Link href="/profile" className="text-sm text-white/80 hover:text-white transition-colors">Profile</Link>
-            <a href="/api/auth/login" className="text-sm text-white/80 hover:text-white transition-colors">Login</a>
+            {userName ? (
+              <>
+                <span className="text-sm text-white/80">{userName}</span>
+                <a href="/auth/logout" className="text-sm text-white/80 hover:text-white transition-colors">Logout</a>
+              </>
+            ) : (
+              <Link href="/login" className="text-sm text-white/80 hover:text-white transition-colors">Login</Link>
+            )}
           </nav>
         </div>
       </header>
@@ -720,6 +727,16 @@ export default function Home() {
       )}
     </div>
   );
+}
+
+export async function getServerSideProps(context) {
+  try {
+    const session = await auth0.getSession(context.req);
+    const userName = session?.user?.name || null;
+    return { props: { userName } };
+  } catch (e) {
+    return { props: { userName: null } };
+  }
 }
 
 function Feature({ title, subtitle }) {

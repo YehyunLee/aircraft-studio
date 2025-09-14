@@ -1,4 +1,4 @@
-import { withPageAuthRequired, getSession } from "@auth0/nextjs-auth0";
+import { auth0 } from "@/lib/auth0";
 
 function ProfilePage({ user }) {
 
@@ -16,7 +16,7 @@ function ProfilePage({ user }) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={user.picture} alt="avatar" className="w-12 h-12 rounded-full" />
                 )}
-                <a href="/api/auth/logout" className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-colors">Logout</a>
+                <a href="/auth/logout" className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-colors">Logout</a>
               </div>
             </div>
           )}
@@ -30,11 +30,11 @@ function ProfilePage({ user }) {
   );
 }
 
-export default withPageAuthRequired(ProfilePage);
+export default auth0.withPageAuthRequired(ProfilePage);
 
-export const getServerSideProps = withPageAuthRequired({
+export const getServerSideProps = auth0.withPageAuthRequired({
   async getServerSideProps(ctx) {
-    const { user } = await getSession(ctx.req, ctx.res);
+    const { user } = await auth0.getSession(ctx.req);
     return { props: { user } };
   },
 });
