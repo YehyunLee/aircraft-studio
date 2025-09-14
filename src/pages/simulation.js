@@ -47,10 +47,16 @@ export default function Simulation() {
   const shotsRef = useRef([]); // array of { mesh, start, life, material }
   const SHOT_LIFETIME = 0.7; // seconds
   const lastShotTimeRef = useRef(0);
-  const SHOT_COOLDOWN = 0.18; // seconds between shots
-  const SHOT_SPEED = 8.0; // meters per second
+  // Dynamic per-jet stats (overridable via Groq). Defaults mirror previous constants.
+  const statsConfigRef = useRef({
+    cooldown: 0.18,       // seconds between shots
+    shotSpeed: 8.0,       // meters per second
+    beamRange: 2.1,       // meters
+    beamWidth: 0.035,     // meters
+    aimSpreadDeg: 10.0,   // degrees
+    forwardSpeed: 0.88,   // base forward cruise speed magnitude
+  });
   const isFiringRef = useRef(false); // hold-to-fire flag
-  const AIM_SPREAD_DEG = 10.0; // random aim cone half-angle in degrees
 
   // Audio refs
   const audioListenerRef = useRef();
@@ -221,6 +227,32 @@ export default function Simulation() {
     };
   }, []);
 
+  // Fetch Groq-derived jet stats when the selected model changes
+  useEffect(() => {
+    const applyStats = async () => {
+      try {
+        const modelEntry = (availableModels || []).find(m => m && m.modelPath === selectedModel) || null;
+        const jetName = modelEntry?.name || null;
+        const body = { action: 'stats', jetName, prompt: jetName };
+        const resp = await fetch('/api/prompt-engineering', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const json = await resp.json();
+        if (json && json.ok && json.stats) {
+          statsConfigRef.current = {
+            ...statsConfigRef.current,
+            ...json.stats,
+          };
+        }
+      } catch (_) {
+        // keep defaults on failure
+      }
+    };
+    if (selectedModel) applyStats();
+  }, [selectedModel, availableModels]);
+
   const initAR = async () => {
     if (!navigator.xr || !isARSupported) {
       setError('WebXR AR not supported on this device');
@@ -371,7 +403,7 @@ export default function Simulation() {
 
             // --- Forward speed: use a small negative z (convention: negative z == forward)
             // Start from current forward velocity and smoothly approach a base cruise speed.
-            const baseForward = -0.88; // slightly faster base forward cruise
+            const baseForward = -(statsConfigRef.current?.forwardSpeed || 0.88); // dynamic base forward cruise
             // Smoothly lerp toward base forward speed so changes are not instant
             velocity.current.z = THREE.MathUtils.lerp(velocity.current.z || 0, baseForward, 0.08);
 
@@ -402,7 +434,6 @@ export default function Simulation() {
             // Derive target pitch from forward joystick input: up/down should pivot the jet
             // Positive forward (up control) => nose up. Tuned multiplier for visible pitch.
             const pitch = (curInput.forward || 0) * 0.45;
-
             // Apply yaw incrementally
             if (Math.abs(yaw) > 1e-6) {
               const qYaw = new THREE.Quaternion();
@@ -444,7 +475,6 @@ export default function Simulation() {
             // Slight damping to avoid runaway values
             velocity.current.x *= 0.96;
             velocity.current.y *= 0.96;
-            velocity.current.z = THREE.MathUtils.lerp(velocity.current.z, baseForward, 0.02);
           }
 
           // Update enemies (simple controllers)
@@ -606,7 +636,7 @@ export default function Simulation() {
           try {
             if (isFiringRef.current) {
               const nowSec = (performance.now() || Date.now()) / 1000;
-              if (nowSec - (lastShotTimeRef.current || 0) >= SHOT_COOLDOWN) {
+              if (nowSec - (lastShotTimeRef.current || 0) >= (statsConfigRef.current?.cooldown || 0.18)) {
                 fireShot();
               }
             }
@@ -899,15 +929,15 @@ export default function Simulation() {
       if (!scene || !aircraft || !renderer) return;
 
       const now = (performance.now() || Date.now()) / 1000;
-      if (now - (lastShotTimeRef.current || 0) < SHOT_COOLDOWN) return;
+      if (now - (lastShotTimeRef.current || 0) < (statsConfigRef.current?.cooldown || 0.18)) return;
       lastShotTimeRef.current = now;
 
-  // stats: shots fired
-  try {
-    statsRef.current.shotsFired = (statsRef.current.shotsFired || 0) + 1;
-    setLastUpdatedStat('shotsFired');
-    setLastUpdatedAt(Date.now());
-  } catch (_) {}
+      // stats: shots fired
+      try {
+        statsRef.current.shotsFired = (statsRef.current.shotsFired || 0) + 1;
+        setLastUpdatedStat('shotsFired');
+        setLastUpdatedAt(Date.now());
+      } catch (_) {}
 
       // Play shooting sound
       if (shootingSoundRef.current && shootingSoundRef.current.buffer) {
@@ -922,12 +952,12 @@ export default function Simulation() {
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(aircraft.quaternion).normalize();
 
       // Beam and muzzle parameters
-  const maxBeamLength = 2.1; // meters (slightly shorter)
-      const beamWidth = 0.035; // meters
-  const startOffset = 0.6; // forward from nose (closer to jet)
+      const maxBeamLength = statsConfigRef.current?.beamRange || 2.1; // meters
+      const beamWidth = statsConfigRef.current?.beamWidth || 0.035; // meters
+      const startOffset = 0.6; // forward from nose (closer to jet)
       const slightUp = 0.06; // raise beam slightly
 
-      // Compute muzzle position in local space for accuracy, then convert to world
+      // Compute muzzle in local space -> world
       const muzzleLocal = new THREE.Vector3(0, slightUp, startOffset);
       const startPos = muzzleLocal.clone();
       aircraft.localToWorld(startPos);
@@ -956,7 +986,7 @@ export default function Simulation() {
             const minBeamLength = 0.7;
             beamLength = Math.max(minBeamLength, Math.min(maxBeamLength, nearestDist));
             // Apply a small random angular spread so aim is not perfectly precise
-            const spread = THREE.MathUtils.degToRad(AIM_SPREAD_DEG);
+            const spread = THREE.MathUtils.degToRad(statsConfigRef.current?.aimSpreadDeg || 10.0);
             const r = Math.sqrt(Math.random()); // concentrate samples toward center
             const theta = Math.random() * Math.PI * 2.0;
             const offsetMag = Math.tan(spread) * r;
@@ -985,9 +1015,9 @@ export default function Simulation() {
         dir.copy(fwd);
       }
 
-  const geo = new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1);
-  // Move geometry so local origin is at the base (muzzle), not the center
-  geo.translate(0, beamLength * 0.5, 0);
+      const geo = new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1);
+      // Move geometry so local origin is at the base (muzzle), not the center
+      geo.translate(0, beamLength * 0.5, 0);
       const mat = new THREE.ShaderMaterial({
         transparent: true,
         depthWrite: false,
@@ -1033,14 +1063,14 @@ export default function Simulation() {
       // Align plane +Y with aim direction
       const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
       mesh.quaternion.copy(q);
-  // Place base exactly at the muzzle
-  mesh.position.copy(startPos);
+      // Place base exactly at the muzzle
+      mesh.position.copy(startPos);
       mesh.frustumCulled = false;
       mesh.renderOrder = 999;
       scene.add(mesh);
 
-  // store velocity for motion along aim direction
-  const vel = new THREE.Vector3().copy(dir).multiplyScalar(SHOT_SPEED);
+      // store velocity for motion along aim direction
+      const vel = new THREE.Vector3().copy(dir).multiplyScalar(statsConfigRef.current?.shotSpeed || 8.0);
       shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel, owner: 'player', dir: dir.clone(), length: beamLength, beamWidth });
     } catch (e) {
       // ignore
@@ -1084,7 +1114,7 @@ export default function Simulation() {
       const distToPlayer = Math.max(0.001, dir.length());
       dir.normalize();
       try {
-        const spread = THREE.MathUtils.degToRad(AIM_SPREAD_DEG * 0.8); // a bit tighter than player
+        const spread = THREE.MathUtils.degToRad((statsConfigRef.current?.aimSpreadDeg || 10.0) * 0.8); // a bit tighter than player
         const r = Math.sqrt(Math.random());
         const theta = Math.random() * Math.PI * 2.0;
         const offsetMag = Math.tan(spread) * r;
@@ -1102,9 +1132,9 @@ export default function Simulation() {
       } catch (_) {}
 
       // Beam geometry and material (red)
-      const maxBeamLength = 1.9;
+      const maxBeamLength = statsConfigRef.current?.beamRange || 2.1;
       const beamLength = Math.max(0.6, Math.min(maxBeamLength, distToPlayer));
-      const beamWidth = 0.034;
+      const beamWidth = statsConfigRef.current?.beamWidth || 0.034;
       const geo = new THREE.PlaneGeometry(beamWidth, beamLength, 1, 1);
       geo.translate(0, beamLength * 0.5, 0);
 
@@ -1156,7 +1186,7 @@ export default function Simulation() {
       mesh.renderOrder = 999;
       scene.add(mesh);
 
-      const vel = new THREE.Vector3().copy(dir).multiplyScalar(SHOT_SPEED * 0.95);
+      const vel = new THREE.Vector3().copy(dir).multiplyScalar((statsConfigRef.current?.shotSpeed || 8.0) * 0.95);
       shotsRef.current.push({ mesh, start: now, life: SHOT_LIFETIME, material: mat, velocity: vel, owner: 'enemy', dir: dir.clone(), length: beamLength, beamWidth });
     } catch (_) {
       // ignore
@@ -1604,9 +1634,9 @@ export default function Simulation() {
       rendererRef.current = null;
     }
 
-  sessionRef.current = null;
-  sceneRef.current = null;
-  cameraRef.current = null;
+    sessionRef.current = null;
+    sceneRef.current = null;
+    cameraRef.current = null;
     aircraftRef.current = null;
     // Cleanup enemies
     try {
@@ -1676,7 +1706,7 @@ export default function Simulation() {
   };
 
   return (
-  <div className="min-h-dvh text-white bg-[#05060a] relative" style={{ background: (isARActive && overlayUsesBody) ? 'transparent' : undefined }}>
+    <div className="min-h-dvh text-white bg-[#05060a] relative" style={{ background: (isARActive && overlayUsesBody) ? 'transparent' : undefined }}>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
       </Head>
@@ -1822,7 +1852,7 @@ export default function Simulation() {
         </div>
       )}
       
-  <div id="ar-ui-container" style={{ pointerEvents: showLeaderboard ? 'auto' : undefined }}>
+      <div id="ar-ui-container" style={{ pointerEvents: showLeaderboard ? 'auto' : undefined }}>
         {/* HUD off-screen indicator */}
         <div ref={hudRef} id="hud-indicator" className="hud-indicator" style={{display: 'none'}}>
           <div className="hud-arrow">▸</div>
@@ -1832,7 +1862,7 @@ export default function Simulation() {
           <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
             <button
               onClick={exitARAndGoHome}
-              className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white font-medium backdrop-blur hover:bg-white/15 transition"
+              className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white font-medium backdrop-blur hover:bg-white/15 transition text-sm"
             >
               Exit AR
             </button>
