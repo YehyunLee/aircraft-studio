@@ -31,12 +31,13 @@ Current prototype focuses on the home page, Hangar flow, and a responsive AR-sty
 - Auth0: Optional Google login enables authenticated run submissions; guest play remains supported.
 
 ## Technical highlights
+- Supporting both iOS and Android.
 - Mobile-first UX: touch-first controls, small UI footprint, quick iteration
 - Kinematic flight model: responsive motion without full aero sim
   - Smoothed velocity targets, clamped rates, joystick-driven yaw/pitch/roll
 - Lightweight effects: audio cues and hit markers to keep FPS high on phones
 - Telemetry scaffolding: documented event shapes for sessions, frames, collisions, and gameplay—designed for batched posting and on-device sampling
-- Enhanced prompt with Groq, text to image with Flux 1, and image to 3D with Spar 3D.
+- Enhanced prompt with Groq, text to image with Flux 1, and image to 3D with Spar 3D
 
 ## Challenges
 - Balancing realism vs. responsiveness for phone AR
