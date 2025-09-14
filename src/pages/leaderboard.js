@@ -2,8 +2,72 @@ import Head from "next/head";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { auth0 } from "@/lib/auth0";
+import React, { useState, useEffect } from "react";
 
 export default function LeaderboardPage({ userName = null, entries = [], mode = 'top-users' }) {
+  function StatsPills({ stats }) {
+    if (!stats) return null;
+    const s = stats || {};
+    const [openKey, setOpenKey] = useState(null);
+    useEffect(() => {
+      const onDoc = () => setOpenKey(null);
+      document.addEventListener('click', onDoc);
+      return () => document.removeEventListener('click', onDoc);
+    }, []);
+
+    const meta = {
+      forwardSpeed: { label: 'Speed', unit: '', min: 0.4, max: 1.4, desc: 'Base forward cruise speed (higher = faster).', color: 'emerald' },
+      beamRange: { label: 'Range', unit: 'm', min: 1.2, max: 3.5, desc: 'Max beam length (longer = reach farther).', color: 'cyan' },
+      cooldown: { label: 'Cooldown', unit: 's', min: 0.08, max: 0.35, desc: 'Time between shots (lower = faster fire).', color: 'indigo' },
+      shotSpeed: { label: 'Shot', unit: 'm/s', min: 5, max: 14, desc: 'Projectile travel speed (higher = faster shots).', color: 'rose' },
+      beamWidth: { label: 'Width', unit: 'm', min: 0.02, max: 0.06, desc: 'Beam thickness (wider beams are easier to hit).', color: 'amber' },
+      aimSpreadDeg: { label: 'Spread', unit: '°', min: 4, max: 18, desc: 'Aim cone half-angle (lower = more precise).', color: 'fuchsia' },
+    };
+
+    const colorClasses = {
+      emerald: { bg: 'bg-emerald-500/15', border: 'border-emerald-400/25', text: 'text-emerald-200' },
+      cyan: { bg: 'bg-cyan-500/15', border: 'border-cyan-400/25', text: 'text-cyan-200' },
+      indigo: { bg: 'bg-indigo-500/15', border: 'border-indigo-400/25', text: 'text-indigo-200' },
+      rose: { bg: 'bg-rose-500/15', border: 'border-rose-400/25', text: 'text-rose-200' },
+      amber: { bg: 'bg-amber-500/15', border: 'border-amber-400/25', text: 'text-amber-200' },
+      fuchsia: { bg: 'bg-fuchsia-500/15', border: 'border-fuchsia-400/25', text: 'text-fuchsia-200' },
+    };
+
+    const Pill = ({ k, v }) => {
+      const m = meta[k];
+      if (!m || typeof v !== 'number') return null;
+      const open = openKey === k;
+      const c = colorClasses[m.color] || colorClasses.emerald;
+      const value = k === 'beamWidth' ? v.toFixed(3) : (k === 'shotSpeed' ? v.toFixed(1) : v.toFixed(2));
+      return (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setOpenKey(open ? null : k); }}
+          className={`px-2 py-0.5 relative rounded-full ${c.bg} border ${c.border} text-[10px] ${c.text}`}
+        >
+          {m.label} {value}{m.unit}
+          {open && (
+            <div className="absolute z-50 left-1/2 -translate-x-1/2 mt-2 w-[220px] text-left rounded-lg bg-black/90 text-white/90 text-[11px] p-2 shadow-lg border border-white/10">
+              <div className="font-medium mb-0.5">{m.label}</div>
+              <div className="mb-1 opacity-80">{m.desc}</div>
+              <div className="opacity-70">Min {m.min}{m.unit} • Max {m.max}{m.unit}</div>
+            </div>
+          )}
+        </button>
+      );
+    };
+
+    return (
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        <Pill k="forwardSpeed" v={s.forwardSpeed} />
+        <Pill k="beamRange" v={s.beamRange} />
+        <Pill k="cooldown" v={s.cooldown} />
+        <Pill k="shotSpeed" v={s.shotSpeed} />
+        <Pill k="beamWidth" v={s.beamWidth} />
+        <Pill k="aimSpreadDeg" v={s.aimSpreadDeg} />
+      </div>
+    );
+  }
   return (
     <div className="min-h-dvh text-white font-sans bg-[#05060a] relative">
       <div
@@ -74,6 +138,7 @@ export default function LeaderboardPage({ userName = null, entries = [], mode = 
                             <> • Acc: {Math.round(e.accuracy * 100)}%</>
                           )}
                         </div>
+                        {e.stats && <StatsPills stats={e.stats} />}
                       </div>
                     </div>
                     <div className="text-right">

@@ -7,6 +7,99 @@ import { saveModelBlob, getModelObjectURL } from "../lib/idbModels";
 import BottomNav from "@/components/BottomNav";
 import { auth0 } from "@/lib/auth0";
 
+// Reusable stat pills
+function StatsPills({ stats, compact = false }) {
+  if (!stats) return null;
+  const s = stats || {};
+  const base = compact ? "text-[10px] px-1.5 py-0.5" : "text-[10px] px-2 py-0.5";
+
+  const [openKey, setOpenKey] = useState(null);
+  useEffect(() => {
+    const onDoc = () => setOpenKey(null);
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, []);
+
+  const meta = {
+    forwardSpeed: {
+      label: 'Speed',
+      unit: '',
+      min: 0.4, max: 1.4,
+      desc: 'Base forward cruise speed (higher = faster).',
+      color: 'emerald'
+    },
+    beamRange: {
+      label: 'Range',
+      unit: 'm',
+      min: 1.2, max: 3.5,
+      desc: 'Max beam length (longer = reach farther).',
+      color: 'cyan'
+    },
+    cooldown: {
+      label: 'Cooldown',
+      unit: 's',
+      min: 0.08, max: 0.35,
+      desc: 'Time between shots (lower = faster fire).',
+      color: 'indigo'
+    },
+    shotSpeed: {
+      label: 'Shot',
+      unit: 'm/s',
+      min: 5, max: 14,
+      desc: 'Projectile travel speed (higher = faster shots).',
+      color: 'rose'
+    },
+    beamWidth: {
+      label: 'Width',
+      unit: 'm',
+      min: 0.02, max: 0.06,
+      desc: 'Beam thickness (wider beams are easier to hit).',
+      color: 'amber'
+    },
+    aimSpreadDeg: {
+      label: 'Spread',
+      unit: '°',
+      min: 4, max: 18,
+      desc: 'Aim cone half-angle (lower = more precise).',
+      color: 'fuchsia'
+    }
+  };
+
+  const Pill = ({ k, v }) => {
+    const m = meta[k];
+    if (!m || typeof v !== 'number') return null;
+    const open = openKey === k;
+    const color = m.color;
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpenKey(open ? null : k); }}
+        className={`${base} relative rounded-full bg-${color}-500/15 border border-${color}-400/25 text-${color}-200`}
+      >
+        {m.label} {k === 'beamWidth' ? v.toFixed(3) : (k === 'shotSpeed' ? v.toFixed(1) : v.toFixed(2))}{m.unit}
+        {open && (
+          <div className="absolute z-50 left-1/2 -translate-x-1/2 mt-2 w-[220px] text-left rounded-lg bg-black/90 text-white/90 text-[11px] p-2 shadow-lg border border-white/10">
+            <div className="font-medium mb-0.5">{m.label}</div>
+            <div className="mb-1 opacity-80">{m.desc}</div>
+            <div className="opacity-70">Min {m.min}{m.unit} • Max {m.max}{m.unit}</div>
+          </div>
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <Pill k="forwardSpeed" v={s.forwardSpeed} />
+      <Pill k="beamRange" v={s.beamRange} />
+      <Pill k="cooldown" v={s.cooldown} />
+      <Pill k="shotSpeed" v={s.shotSpeed} />
+      <Pill k="beamWidth" v={s.beamWidth} />
+      <Pill k="aimSpreadDeg" v={s.aimSpreadDeg} />
+    </div>
+  );
+}
+
 export default function Home({ userName = null }) {
   const [prompt, setPrompt] = useState("");
   const [enhancedPrompt, setEnhancedPrompt] = useState("");
@@ -28,6 +121,10 @@ export default function Home({ userName = null }) {
   const [generationHistory, setGenerationHistory] = useState([]);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(null);
 
+  // Jet stats cache and current stats
+  const [jetStatsCache, setJetStatsCache] = useState({}); // { key: stats }
+  const [currentStats, setCurrentStats] = useState(null);
+
   // Expand/collapse state for long AI Enhanced Prompt text
   const [showFullEnhanced, setShowFullEnhanced] = useState(false);
 
@@ -42,6 +139,10 @@ export default function Home({ userName = null }) {
           console.error('Failed to load generation history:', e);
         }
       }
+      try {
+        const savedStats = localStorage.getItem('jetStats');
+        if (savedStats) setJetStatsCache(JSON.parse(savedStats));
+      } catch (_) {}
     }
   }, []);
 
@@ -51,6 +152,38 @@ export default function Home({ userName = null }) {
       localStorage.setItem('generationHistory', JSON.stringify(generationHistory));
     }
   }, [generationHistory]);
+
+  const persistJetStats = (next) => {
+    setJetStatsCache(next);
+    try { localStorage.setItem('jetStats', JSON.stringify(next)); } catch (_) {}
+  };
+
+  async function fetchJetStats(name, context) {
+    if (!name) return null;
+    const key = name;
+    if (jetStatsCache && jetStatsCache[key]) {
+      setCurrentStats(jetStatsCache[key]);
+      return jetStatsCache[key];
+    }
+    try {
+      const resp = await fetch('/api/prompt-engineering', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stats', jetName: name, prompt: context || '' })
+      });
+      const json = await resp.json();
+      if (json && json.ok && json.stats) {
+        const next = { ...(jetStatsCache || {}) };
+        next[key] = json.stats;
+        persistJetStats(next);
+        setCurrentStats(json.stats);
+        return json.stats;
+      }
+    } catch (e) {
+      // swallow
+    }
+    return null;
+  }
 
   // Reset enhanced text expansion when a new enhanced prompt arrives
   useEffect(() => {
@@ -78,7 +211,6 @@ export default function Home({ userName = null }) {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, [previewModel]);
-
 
   const enhancePrompt = async () => {
     if (!prompt.trim()) {
@@ -175,8 +307,6 @@ export default function Home({ userName = null }) {
     }
   };
 
-
-
   const generate3DModel = async (imageUrl, historyIndex, markCurrent = false) => {
     if (!imageUrl) {
       setError("Please generate an image first");
@@ -264,7 +394,7 @@ export default function Home({ userName = null }) {
       return;
     }
     setFlowRunning(true);
-    setFlowStep('enhancing');
+    setFlowRunning('enhancing');
     setError('');
     try {
       const enhanced = await enhancePrompt();
@@ -294,6 +424,12 @@ export default function Home({ userName = null }) {
       if (!aircraftName) aircraftName = (promptToUse || prompt).split('\n')[0].slice(0, 40);
       const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `aircraft-${Date.now()}`;
       aircraftSlug = slugify(aircraftName);
+
+      // Fetch and display jet stats for this aircraft
+      try {
+        await fetchJetStats(aircraftName, promptToUse);
+      } catch (_) {}
+
       setFlowStep('generating-image');
       const imgRes = await generateImage(promptToUse);
       if (!imgRes) throw new Error('Image generation failed');
@@ -315,7 +451,7 @@ export default function Home({ userName = null }) {
         console.warn('Failed to update generation history with name', e);
       }
       setFlowStep('converting-3d');
-  const modelUrl = await generate3DModel(imgRes.imageUrl, imgRes.index, true);
+      const modelUrl = await generate3DModel(imgRes.imageUrl, imgRes.index, true);
       if (!modelUrl) throw new Error('3D conversion failed');
       setFlowStep('done');
     } catch (e) {
@@ -325,8 +461,6 @@ export default function Home({ userName = null }) {
       setFlowRunning(false);
     }
   };
-
-
 
   const removeFromHistory = (index, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
@@ -547,6 +681,13 @@ export default function Home({ userName = null }) {
                               ? enhancedPrompt
                               : `${enhancedPrompt.slice(0, 220)}…`}
                           </p>
+                          {/* Jet Stats preview */}
+                          {currentStats && (
+                            <div className="mt-3">
+                              <p className="text-[11px] text-white/60 mb-1">Jet characteristics</p>
+                              <StatsPills stats={currentStats} />
+                            </div>
+                          )}
                           {enhancedPrompt.length > 220 && (
                             <button
                               type="button"

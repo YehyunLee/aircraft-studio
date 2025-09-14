@@ -4,11 +4,68 @@ import { auth0 } from "@/lib/auth0";
 import { useRouter } from "next/router";
 import BottomNav from "@/components/BottomNav";
 
+// Small renderer for stat pills with mobile tooltips
+function StatsPills({ stats }) {
+  if (!stats) return null;
+  const s = stats || {};
+  const [openKey, setOpenKey] = useState(null);
+  useEffect(() => {
+    const onDoc = () => setOpenKey(null);
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, []);
+
+  const meta = {
+    forwardSpeed: { label: 'Speed', unit: '', min: 0.4, max: 1.4, desc: 'Base forward cruise speed (higher = faster).', color: 'emerald' },
+    beamRange: { label: 'Range', unit: 'm', min: 1.2, max: 3.5, desc: 'Max beam length (longer = reach farther).', color: 'cyan' },
+    cooldown: { label: 'Cooldown', unit: 's', min: 0.08, max: 0.35, desc: 'Time between shots (lower = faster fire).', color: 'indigo' },
+    shotSpeed: { label: 'Shot', unit: 'm/s', min: 5, max: 14, desc: 'Projectile travel speed (higher = faster shots).', color: 'rose' },
+    beamWidth: { label: 'Width', unit: 'm', min: 0.02, max: 0.06, desc: 'Beam thickness (wider beams are easier to hit).', color: 'amber' },
+    aimSpreadDeg: { label: 'Spread', unit: '°', min: 4, max: 18, desc: 'Aim cone half-angle (lower = more precise).', color: 'fuchsia' },
+  };
+
+  const Pill = ({ k, v }) => {
+    const m = meta[k];
+    if (!m || typeof v !== 'number') return null;
+    const open = openKey === k;
+    const c = m.color;
+    const value = k === 'beamWidth' ? v.toFixed(3) : (k === 'shotSpeed' ? v.toFixed(1) : v.toFixed(2));
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpenKey(open ? null : k); }}
+        className={`text-[10px] px-2 py-0.5 relative rounded-full bg-${c}-500/15 border border-${c}-400/25 text-${c}-200`}
+      >
+        {m.label} {value}{m.unit}
+        {open && (
+          <div className="absolute z-50 left-1/2 -translate-x-1/2 mt-2 w-[220px] text-left rounded-lg bg-black/90 text-white/90 text-[11px] p-2 shadow-lg border border-white/10">
+            <div className="font-medium mb-0.5">{m.label}</div>
+            <div className="mb-1 opacity-80">{m.desc}</div>
+            <div className="opacity-70">Min {m.min}{m.unit} • Max {m.max}{m.unit}</div>
+          </div>
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      <Pill k="forwardSpeed" v={s.forwardSpeed} />
+      <Pill k="beamRange" v={s.beamRange} />
+      <Pill k="cooldown" v={s.cooldown} />
+      <Pill k="shotSpeed" v={s.shotSpeed} />
+      <Pill k="beamWidth" v={s.beamWidth} />
+      <Pill k="aimSpreadDeg" v={s.aimSpreadDeg} />
+    </div>
+  );
+}
+
 // Hangar now shows a flat list of previously generated aircraft (generationHistory)
 export default function Hangar({ userName = null }) {
   const [history, setHistory] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const router = useRouter();
+  const [statsCache, setStatsCache] = useState({}); // { key: stats }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -18,6 +75,10 @@ export default function Hangar({ userName = null }) {
     } catch (e) {
       setHistory([]);
     }
+    try {
+      const rawStats = localStorage.getItem('jetStats');
+      setStatsCache(rawStats ? JSON.parse(rawStats) : {});
+    } catch (_) {}
 
     function onStorage(e) {
       if (!e.key) return;
@@ -28,17 +89,52 @@ export default function Hangar({ userName = null }) {
           setHistory([]);
         }
       }
+      if (e.key === 'jetStats') {
+        try {
+          setStatsCache(e.newValue ? JSON.parse(e.newValue) : {});
+        } catch (_) {}
+      }
     }
 
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  function selectFromHistory(index) {
-    setSelectedIndex(index === selectedIndex ? null : index);
+  const persistStats = (next) => {
+    setStatsCache(next);
+    try { localStorage.setItem('jetStats', JSON.stringify(next)); } catch (_) {}
+  };
+
+  async function fetchStatsFor(item) {
+    if (!item) return null;
+    const key = item.slugId || item.name || item.enhancedPrompt || item.originalPrompt;
+    if (!key) return null;
+    if (statsCache && statsCache[key]) return statsCache[key];
+    try {
+      const resp = await fetch('/api/prompt-engineering', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stats', jetName: item.name || key, prompt: item.enhancedPrompt || item.originalPrompt || '' })
+      });
+      const json = await resp.json();
+      if (json && json.ok && json.stats) {
+        const next = { ...(statsCache || {}) };
+        next[key] = json.stats;
+        persistStats(next);
+        return json.stats;
+      }
+    } catch (_) {}
+    return null;
   }
 
-
+  function selectFromHistory(index) {
+    setSelectedIndex(index === selectedIndex ? null : index);
+    const item = history[index];
+    if (item) {
+      // lazy fetch stats when user selects an item
+      fetchStatsFor(item);
+    }
+  }
 
   function removeFromHistory(index, e) {
     if (e && e.stopPropagation) e.stopPropagation();
@@ -154,14 +250,18 @@ export default function Hangar({ userName = null }) {
           </div>
         ) : (
           <div className="space-y-3">
-            {history.map((item, index) => (
-              <div
-                key={item.id || index}
-                className={`panel p-4 rounded-xl transition-all duration-200 cursor-pointer hover:bg-white/10 ${
-                  selectedIndex === index ? "border-white/30 bg-white/10" : "border-white/10"
+            {history.map((item, index) => {
+              const key = item.slugId || item.name || item.enhancedPrompt || item.originalPrompt;
+              const stats = (statsCache && key) ? statsCache[key] : null;
+              const selected = selectedIndex === index;
+              return (
+                <div
+                  key={item.id || index}
+                  className={`panel p-4 rounded-xl transition-all duration-200 cursor-pointer hover:bg-white/10 ${
+                  selected ? "border-white/30 bg-white/10" : "border-white/10"
                 }`}
-                onClick={() => selectFromHistory(index)}
-              >
+                  onClick={() => selectFromHistory(index)}
+                >
                   <div className="flex gap-4">
                    <div className="w-20 h-20 rounded-lg overflow-hidden bg-white/10 flex-shrink-0 border border-white/10">
                      <img src={item.imageUrl} alt={`Generation ${index + 1}`} className="w-full h-full object-cover" />
@@ -180,6 +280,10 @@ export default function Hangar({ userName = null }) {
  
                     <div className="text-base font-medium truncate">{item.name || item.enhancedPrompt || item.originalPrompt || item.prompt}</div>
                      <div className="text-[11px] text-white/60 mt-2">{item.timestamp ? new Date(item.timestamp).toLocaleString() : (item.slugId || item.id)}</div>
+
+                     {selected && (
+                       <StatsPills stats={stats} />
+                     )}
                    </div>
  
                    <div className="flex flex-col items-end gap-2">
@@ -189,13 +293,24 @@ export default function Hangar({ userName = null }) {
                         ) : (
                           <span className="px-3 py-2 rounded-xl bg-white/10 text-white/70 text-sm">No 3D</span>
                         )}
-                       </div>
+                        </div>
                       <button
                         onClick={(e) => onSimulationClick(e, item)}
                         className="px-3 py-2 rounded-xl bg-white/10 text-white font-medium hover:bg-white/15 transition"
                       >
                         Simulation
                       </button>
+
+                      {selected && !stats && (
+                        <div className="mt-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); fetchStatsFor(item); }}
+                            className="text-[11px] px-2 py-1 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:text-white hover:bg-white/15 transition"
+                          >
+                            Get jet stats
+                          </button>
+                        </div>
+                      )}
 
                     <div className="mt-2">
                       <button
@@ -209,7 +324,8 @@ export default function Hangar({ userName = null }) {
                   </div>
                  </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
