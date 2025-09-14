@@ -431,7 +431,7 @@ export default function Home() {
             <section className="glass-card rounded-3xl p-8 mb-8 text-center">
               <div className="max-w-2xl mx-auto">
                 <h2 className="text-3xl sm:text-4xl font-bold leading-tight mb-3">Design & Simulate</h2>
-                <p className="text-sm text-white/70 mb-6">Generate a concept, preview in 3D, fly in AR.</p>
+                <p className="text-sm text-white/70 mb-6">Taste future of engineering:<br />Design 3D aircraft using AI, simulate piloting in AR.</p>
 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center mb-6">
                   <button
@@ -512,13 +512,6 @@ export default function Home() {
                     ) : (
                       <>Generate</>
                     )}
-                  </button>
-                  <button
-                    onClick={startNewGeneration}
-                    disabled={flowRunning}
-                    className="px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/15 transition disabled:opacity-50"
-                  >
-                    New
                   </button>
                 </div>
 
