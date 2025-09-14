@@ -70,6 +70,19 @@ export default function Simulation() {
   const sessionStartRef = useRef(null);
   const statsRef = useRef({ shotsFired: 0, hits: 0, enemiesDestroyed: 0 });
   const leaderboardPendingRef = useRef(false);
+  // Live HUD stats and highlighting state
+  const [statsSnapshot, setStatsSnapshot] = useState({
+    score: 0,
+    shotsFired: 0,
+    hits: 0,
+    enemiesDestroyed: 0,
+    accuracy: 0,
+    time: 0,
+  });
+  const [lastUpdatedStat, setLastUpdatedStat] = useState(null); // 'shotsFired' | 'hits' | 'enemiesDestroyed' | 'time' | 'score'
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(0);
+  const [enemiesZeroPulse, setEnemiesZeroPulse] = useState(false);
+  const [lastRunSummary, setLastRunSummary] = useState(null); // { score, clearTime, enemiesDestroyed, shotsFired, hits }
 
   // AR session refs
   const rendererRef = useRef();
@@ -506,7 +519,11 @@ export default function Simulation() {
                       if (!s.hitEnemies) s.hitEnemies = new Set();
                       s.hitEnemies.add(entry.id);
                       // stats: hits
-                      try { statsRef.current.hits = (statsRef.current.hits || 0) + 1; } catch (_) {}
+                      try {
+                        statsRef.current.hits = (statsRef.current.hits || 0) + 1;
+                        setLastUpdatedStat('hits');
+                        setLastUpdatedAt(Date.now());
+                      } catch (_) {}
                       entry.hp = (entry.hp ?? 10) - 1;
                       if (entry.hp <= 0) {
                         // explode and remove enemy
@@ -517,7 +534,11 @@ export default function Simulation() {
                         const idx = enemies.indexOf(entry);
                         if (idx >= 0) enemies.splice(idx, 1);
                         // stats: enemies destroyed
-                        try { statsRef.current.enemiesDestroyed = (statsRef.current.enemiesDestroyed || 0) + 1; } catch (_) {}
+                        try {
+                          statsRef.current.enemiesDestroyed = (statsRef.current.enemiesDestroyed || 0) + 1;
+                          setLastUpdatedStat('enemiesDestroyed');
+                          setLastUpdatedAt(Date.now());
+                        } catch (_) {}
                       }
                       // Optionally, consume the shot on hit (so it doesn't keep hitting others). Comment out to allow piercing.
                       // if (s.mesh && s.mesh.parent) s.mesh.parent.remove(s.mesh);
@@ -778,6 +799,50 @@ export default function Simulation() {
     } catch (_) {}
   }, [isARActive]);
 
+  // Periodically compute live score and stats for HUD while AR is active
+  useEffect(() => {
+    if (!isARActive) return;
+    const id = setInterval(() => {
+      try {
+        const now = (performance.now() || Date.now()) / 1000;
+        const start = sessionStartRef.current || now;
+        const t = Math.max(0, now - start);
+        const s = statsRef.current || { shotsFired: 0, hits: 0, enemiesDestroyed: 0 };
+        const accuracy = s.shotsFired > 0 ? s.hits / s.shotsFired : 0;
+        const score = Math.max(0, Math.round(1000 + (s.enemiesDestroyed || 0) * 100 + (s.hits || 0) * 25 - (s.shotsFired || 0) * 5 - Math.floor(t * 10)));
+        setStatsSnapshot({
+          score,
+          shotsFired: s.shotsFired || 0,
+          hits: s.hits || 0,
+          enemiesDestroyed: s.enemiesDestroyed || 0,
+          accuracy,
+          time: t,
+        });
+        // Optionally highlight score/time when they change significantly
+        // Highlight score when it increases
+        if (score !== statsSnapshot.score) {
+          setLastUpdatedStat('score');
+          setLastUpdatedAt(Date.now());
+        }
+        // Briefly mark time updates every ~2s
+        if (Math.floor(t) % 2 === 0 && Math.floor(t) !== Math.floor(statsSnapshot.time)) {
+          setLastUpdatedStat('time');
+          setLastUpdatedAt(Date.now());
+        }
+      } catch (_) {}
+    }, 250);
+    return () => clearInterval(id);
+  }, [isARActive]);
+
+  // Pulse when enemiesRemaining reaches zero
+  useEffect(() => {
+    if (enemiesRemaining === 0 && isARActive) {
+      setEnemiesZeroPulse(true);
+      const t = setTimeout(() => setEnemiesZeroPulse(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [enemiesRemaining, isARActive]);
+
   // Handle Enter AR button: on iOS outside of Launch viewer, use SDK to relaunch
   const handleEnterAR = async () => {
     try {
@@ -808,7 +873,11 @@ export default function Simulation() {
       lastShotTimeRef.current = now;
 
   // stats: shots fired
-  try { statsRef.current.shotsFired = (statsRef.current.shotsFired || 0) + 1; } catch (_) {}
+  try {
+    statsRef.current.shotsFired = (statsRef.current.shotsFired || 0) + 1;
+    setLastUpdatedStat('shotsFired');
+    setLastUpdatedAt(Date.now());
+  } catch (_) {}
 
       // Play shooting sound
       if (shootingSoundRef.current && shootingSoundRef.current.buffer) {
@@ -1185,6 +1254,17 @@ export default function Simulation() {
     // Show leaderboard overlay while still in AR; user will choose to close (and then we'll exit)
     // Quiet the scene audio once wave is complete (especially for iOS)
     try { stopAllAudio(false); } catch (_) {}
+    try {
+      const s = statsRef.current || { shotsFired: 0, hits: 0, enemiesDestroyed: 0 };
+      const scoreNow = Math.max(0, Math.round(1000 + (s.enemiesDestroyed || 0) * 100 + (s.hits || 0) * 25 - (s.shotsFired || 0) * 5 - Math.floor(clearTime * 10)));
+      setLastRunSummary({
+        score: scoreNow,
+        clearTime,
+        enemiesDestroyed: s.enemiesDestroyed || 0,
+        shotsFired: s.shotsFired || 0,
+        hits: s.hits || 0,
+      });
+    } catch (_) {}
     setShowLeaderboard(true);
   };
 
@@ -1704,7 +1784,7 @@ export default function Simulation() {
         </div>
       )}
       
-      <div id="ar-ui-container">
+  <div id="ar-ui-container" style={{ pointerEvents: showLeaderboard ? 'auto' : undefined }}>
         {/* HUD off-screen indicator */}
         <div ref={hudRef} id="hud-indicator" className="hud-indicator" style={{display: 'none'}}>
           <div className="hud-arrow">▸</div>
@@ -1718,10 +1798,19 @@ export default function Simulation() {
             >
               Exit AR
             </button>
-            <div
-              className={`px-4 py-2 rounded-xl text-sm font-semibold shadow-md bg-black/50 border border-white/15 backdrop-blur text-white/90`}
-            >
-              Enemies left: <span className={`${enemiesRemaining === 0 ? 'text-emerald-300' : enemiesRemaining <= 3 ? 'text-yellow-300' : 'text-red-300'}`}>{enemiesRemaining}</span>
+            <div className="flex items-center gap-2">
+              <div
+                className={`px-4 py-2 rounded-xl text-sm font-semibold shadow-md bg-black/50 border border-white/15 backdrop-blur text-white/90 ${enemiesZeroPulse ? 'pulse-outline' : ''}`}
+                title="Enemies remaining"
+              >
+                Enemies left: <span className={`${enemiesRemaining === 0 ? 'text-emerald-300' : enemiesRemaining <= 3 ? 'text-yellow-300' : 'text-red-300'}`}>{enemiesRemaining}</span>
+              </div>
+              <div
+                className={`px-3 py-2 rounded-xl text-sm font-semibold shadow-md bg-black/50 border border-white/15 backdrop-blur text-white/90 ${lastUpdatedStat === 'time' && Date.now() - lastUpdatedAt < 900 ? 'highlight' : ''}`}
+                title="Elapsed time"
+              >
+                Time: {statsSnapshot.time.toFixed(1)}s
+              </div>
             </div>
           </div>
         )}
@@ -1779,8 +1868,21 @@ export default function Simulation() {
                 <h2 className="text-xl font-semibold">Global Leaderboard</h2>
                 <button className="px-3 py-1 bg-white/10 rounded-lg" onClick={closeLeaderboardAndExit}>Close</button>
               </div>
+              {lastRunSummary && (
+                <div className="mb-4 p-3 rounded-xl bg-white/5 border border-white/10">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-white/80">Your run</div>
+                    <div className="text-cyan-300 font-semibold">{lastRunSummary.score} pts</div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-white/70">
+                    <div>Time: <span className="text-white/90">{lastRunSummary.clearTime.toFixed ? lastRunSummary.clearTime.toFixed(2) : lastRunSummary.clearTime}s</span></div>
+                    <div>Enemies: <span className="text-white/90">{lastRunSummary.enemiesDestroyed}</span></div>
+                    <div>Hits/Shots: <span className="text-white/90">{lastRunSummary.hits}/{lastRunSummary.shotsFired}</span></div>
+                  </div>
+                </div>
+              )}
               <p className="text-sm text-white/60 mb-3">Top scores from recent runs. Sign in to post yours.</p>
-              <div className="space-y-2 max-h-[50vh] overflow-auto">
+              <div className="space-y-2 max-h-[50vh] overflow-auto scrollable" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
                 {leaderboardData.length === 0 && (
                   <div className="text-white/60 text-sm">No records yet.</div>
                 )}
@@ -1859,6 +1961,18 @@ export default function Simulation() {
         .shoot-btn:active {
           transform: scale(0.98);
           background: rgba(255, 255, 255, 0.22);
+        }
+        .highlight {
+          box-shadow: 0 0 0 2px rgba(56,189,248,0.5);
+          background: rgba(56,189,248,0.1);
+          transition: box-shadow 0.2s ease, background 0.2s ease;
+        }
+        .pulse-outline {
+          animation: pulseOutline 1.2s ease-out 1;
+        }
+        @keyframes pulseOutline {
+          0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.6); }
+          100% { box-shadow: 0 0 0 18px rgba(74,222,128,0); }
         }
         /* HUD indicator */
         .hud-indicator {
