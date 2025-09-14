@@ -32,6 +32,20 @@ Current focus
 -------------
 - Building a mobile-first home page and a Hangar experience for creating/selecting aircraft. See `src/pages/index.js` and `src/pages/aircraft.js`.
 
+Authentication (Auth0)
+----------------------
+This app uses Auth0 for optional sign-in. Visit `/login` to either continue as a guest (no account) or sign in with Google. After signing in, you'll land back on the home page.
+
+Environment variables (see `.env.local.example`):
+
+- `AUTH0_DOMAIN`
+- `AUTH0_CLIENT_ID`
+- `AUTH0_CLIENT_SECRET`
+- `AUTH0_SECRET` (generate with `openssl rand -hex 32`)
+- `APP_BASE_URL` (e.g., `https://localhost:3000`)
+
+Ensure the Google connection is enabled in your Auth0 tenant and named `google-oauth2` (default). The bottom nav shows a Login/Profile tab depending on your authentication state.
+
 Notes
 -----
 This README will continue to evolve as AI integrations, image tooling, and 3D conversion features are added. For now, the project focuses on the home page and hangar UX.
