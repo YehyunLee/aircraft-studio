@@ -67,8 +67,15 @@ export default function Hangar() {
   function getPreviewHref(item) {
     // Prefer persistent http(s) URLs; otherwise forward modelId to preview so it can resolve from IndexedDB
     const title = encodeURIComponent(item.name || item.enhancedPrompt || item.originalPrompt || "3D Model");
-    if (item.modelUrl && typeof item.modelUrl === 'string' && item.modelUrl.startsWith('http')) {
-      return `/preview?src=${encodeURIComponent(item.modelUrl)}&title=${title}`;
+    // Accept absolute http(s) URLs OR site-relative paths (e.g., "/api/models/...")
+    if (item.modelUrl && typeof item.modelUrl === 'string') {
+      const url = item.modelUrl;
+      const isHttp = url.startsWith('http://') || url.startsWith('https://');
+      const isRelativePath = url.startsWith('/');
+      const isTransient = url.startsWith('blob:') || url.startsWith('data:');
+      if (!isTransient && (isHttp || isRelativePath)) {
+        return `/preview?src=${encodeURIComponent(url)}&title=${title}`;
+      }
     }
     if (item.modelId) {
       return `/preview?modelId=${encodeURIComponent(item.modelId)}&title=${title}`;
@@ -79,8 +86,14 @@ export default function Hangar() {
   function getSimulationHref(item) {
     // Prefer persistent http(s) URLs; otherwise pass modelId to resolve in simulation
     const title = encodeURIComponent(item.name || item.enhancedPrompt || item.originalPrompt || "3D Model");
-    if (item.modelUrl && typeof item.modelUrl === 'string' && item.modelUrl.startsWith('http')) {
-      return `/simulation?src=${encodeURIComponent(item.modelUrl)}&title=${title}`;
+    if (item.modelUrl && typeof item.modelUrl === 'string') {
+      const url = item.modelUrl;
+      const isHttp = url.startsWith('http://') || url.startsWith('https://');
+      const isRelativePath = url.startsWith('/');
+      const isTransient = url.startsWith('blob:') || url.startsWith('data:');
+      if (!isTransient && (isHttp || isRelativePath)) {
+        return `/simulation?src=${encodeURIComponent(url)}&title=${title}`;
+      }
     }
     if (item.modelId) {
       return `/simulation?modelId=${encodeURIComponent(item.modelId)}&title=${title}`;
