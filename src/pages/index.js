@@ -422,10 +422,10 @@ export default function Home({ userName = null }) {
             {userName ? (
               <>
                 <span className="text-sm text-white/80">{userName}</span>
-                <a href="/auth/logout" className="text-sm text-white/80 hover:text-white transition-colors">Logout</a>
+                <a href="/auth/logout" target="_top" rel="noopener" className="text-sm text-white/80 hover:text-white transition-colors">Logout</a>
               </>
             ) : (
-              <Link href="/login" className="text-sm text-white/80 hover:text-white transition-colors">Login</Link>
+              <Link href="/login" target="_top" className="text-sm text-white/80 hover:text-white transition-colors">Login</Link>
             )}
           </nav>
         </div>
