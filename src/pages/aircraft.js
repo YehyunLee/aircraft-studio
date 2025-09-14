@@ -118,6 +118,17 @@ export default function Hangar({ userName = null }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // Auto-fetch stats for the first few visible items to populate UI without clicks
+  useEffect(() => {
+    if (!history || history.length === 0) return;
+    const toPrefetch = history.slice(0, 6);
+    (async () => {
+      for (const item of toPrefetch) {
+        try { await fetchStatsFor(item); } catch (_) {}
+      }
+    })();
+  }, [history]);
+
   const persistStats = (next) => {
     setStatsCache(next);
     try { localStorage.setItem('jetStats', JSON.stringify(next)); } catch (_) {}
@@ -337,11 +348,21 @@ export default function Hangar({ userName = null }) {
                     </div>
                   </div>
                  </div>
-                 {selected && stats && (
-                   <div className="mt-3 pt-3 border-t border-white/10">
+                 <div className="mt-3 pt-3 border-t border-white/10">
+                   {stats ? (
                      <StatsPills stats={stats} />
-                   </div>
-                 )}
+                   ) : (
+                     <div className="flex items-center justify-between">
+                       <span className="text-[11px] text-white/60">Jet stats not loaded</span>
+                       <button
+                         onClick={(e) => { e.stopPropagation(); fetchStatsFor(item); }}
+                         className="text-[11px] px-2 py-1 rounded-lg bg-white/5 border border-white/15 text-white/80 hover:text-white hover:bg-white/10 transition"
+                       >
+                         Get jet stats
+                       </button>
+                     </div>
+                   )}
+                 </div>
               </div>
               );
             })}
