@@ -392,8 +392,11 @@ export default function Home() {
 
   return (
     <div className="min-h-dvh text-white font-sans bg-[#05060a] relative">
-      {/* grid background */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1px,transparent_0)] [background-size:24px_24px]" />
+      {/* grid background (subtle line grid) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:24px_24px]"
+      />
       <div className="relative z-10 p-4 sm:p-6 lg:p-8 pb-24">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -408,14 +411,13 @@ export default function Home() {
       <header className="max-w-4xl mx-auto mb-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 flex items-center justify-center text-black font-bold text-lg shadow-lg">A</div>
+            <div className="h-10 w-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white font-bold text-lg">A</div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">Aircraft Studio</h1>
-              <p className="text-xs text-white/60">AI-Powered Aircraft Design</p>
+              <h1 className="text-xl font-semibold tracking-tight">Aircraft Studio</h1>
+              <p className="text-xs text-white/60">AI design • AR simulation</p>
             </div>
           </div>
           <nav className="flex items-center gap-4">
-            <Link href="/aircraft" className="text-sm text-cyan-300 hover:text-cyan-200 transition-colors font-medium">Hangar</Link>
             <Link href="/profile" className="text-sm text-white/80 hover:text-white transition-colors">Profile</Link>
             <a href="/api/auth/login" className="text-sm text-white/80 hover:text-white transition-colors">Login</a>
           </nav>
@@ -428,53 +430,36 @@ export default function Home() {
             {/* Hero Section */}
             <section className="glass-card rounded-3xl p-8 mb-8 text-center">
               <div className="max-w-2xl mx-auto">
-                <h2 className="text-3xl sm:text-4xl font-extrabold leading-tight mb-4 bg-gradient-to-r from-cyan-400 to-violet-400 bg-clip-text text-transparent">
-                  Design, Engineer, and Simulate
-                </h2>
-                <p className="text-lg text-white/80 mb-6 leading-relaxed">
-                  Create aircraft concepts with AI assistance. Generate stunning images, convert them to 3D models, and experience them in augmented reality.
-                </p>
+                <h2 className="text-3xl sm:text-4xl font-bold leading-tight mb-3">Design & Simulate</h2>
+                <p className="text-sm text-white/70 mb-6">Generate a concept, preview in 3D, fly in AR.</p>
 
-                <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+                <div className="flex flex-col sm:flex-row gap-3 justify-center mb-6">
                   <button
                     onClick={() => setShowGenerator(true)}
-                    className="px-8 py-4 bg-gradient-to-r from-cyan-400 to-cyan-500 text-black font-bold rounded-xl hover:from-cyan-300 hover:to-cyan-400 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                    className="px-6 py-3 bg-white/10 text-white font-semibold rounded-xl hover:bg-white/15 transition"
                   >
-                    🚀 Start Creating
+                    Create
                   </button>
                   <Link
                     href="/aircraft"
-                    className="px-8 py-4 rounded-xl border-2 border-white/20 text-white font-semibold hover:bg-white/10 hover:border-white/30 transition-all duration-300 text-center"
+                    className="px-6 py-3 rounded-xl border border-white/15 text-white/90 hover:bg-white/05 transition text-center"
                   >
-                    Browse Hangar
+                    Hangar
                   </Link>
                 </div>
-
-                {/* Features Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  <FeatureCard
-                    icon="🤖"
-                    title="AI Engineering"
-                    subtitle="Text-driven aircraft design with Groq AI"
-                  />
-                  <FeatureCard
-                    icon="🎨"
-                    title="Fast Generation"
-                    subtitle="High-quality images with Fireworks AI"
-                  />
-                  <FeatureCard
-                    icon="🎯"
-                    title="3D Conversion"
-                    subtitle="Convert concepts to .glb files with Spar 3D"
-                  />
+                {/* Minimal Features */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                  <Feature title="AI Design" subtitle="Text to concept" />
+                  <Feature title="Image" subtitle="One-click render" />
+                  <Feature title="3D & AR" subtitle="Preview and fly" />
                 </div>
               </div>
             </section>
 
             {/* Mobile CTA */}
             <section className="text-center">
-              <p className="text-sm text-white/70 mb-4">Optimized for mobile — design anywhere</p>
-              <div className="inline-block glass-card rounded-2xl p-6">
+              <p className="text-sm text-white/60 mb-3">Open on your phone</p>
+              <div className="inline-block glass-card rounded-2xl p-5">
                 <div className="w-56 h-56 bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center rounded-xl">
                   <Image src="/qr_code.png" alt="QR Code" width={224} height={224} className="opacity-70" />
                 </div>
@@ -487,17 +472,17 @@ export default function Home() {
             <section className="glass-card rounded-2xl p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-2xl font-bold mb-1">AI Aircraft Generator</h2>
-                  <p className="text-sm text-white/70">Transform your ideas into aircraft designs</p>
+                  <h2 className="text-2xl font-semibold mb-1">Generator</h2>
+                  <p className="text-xs text-white/60">Describe your aircraft</p>
                 </div>
                 <button
                   onClick={() => {
                     setShowGenerator(false);
                     startNewGeneration();
                   }}
-                  className="px-4 py-2 rounded-lg bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all duration-200 text-sm font-medium"
+                  className="px-4 py-2 rounded-lg bg-white/10 text-white/80 hover:bg-white/15 transition text-sm font-medium"
                 >
-                  ← Back to Home
+                  Back
                 </button>
               </div>
 
@@ -520,26 +505,26 @@ export default function Home() {
                   <button
                     onClick={generateAircraft}
                     disabled={flowRunning || !prompt.trim()}
-                    className="flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-500 text-black font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:from-cyan-300 hover:to-cyan-400 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:transform-none"
+                    className="flex-1 px-6 py-3 rounded-xl bg-white/10 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/15 transition"
                   >
                     {flowRunning ? (
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
-                        {flowStep === 'enhancing' && 'Enchanging prompt'}
-                        {flowStep === 'generating-image' && 'Generating image'}
-                        {flowStep === 'converting-3d' && 'Converting to 3D model'}
+                        {flowStep === 'enhancing' && 'Enhancing'}
+                        {flowStep === 'generating-image' && 'Rendering'}
+                        {flowStep === 'converting-3d' && 'Converting 3D'}
                         {flowStep === 'done' && 'Done'}
                       </div>
                     ) : (
-                      <>🚀 Generate Aircraft</>
+                      <>Generate</>
                     )}
                   </button>
                   <button
                     onClick={startNewGeneration}
                     disabled={flowRunning}
-                    className="px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-all duration-200 disabled:opacity-50"
+                    className="px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/15 transition disabled:opacity-50"
                   >
-                    📝 New
+                    New
                   </button>
                 </div>
 
@@ -569,9 +554,9 @@ export default function Home() {
                             <div className="flex flex-col sm:flex-row gap-3">
                               <button
                                 onClick={() => setPreviewModel({ src: currentModelUrl, title: (generationHistory[selectedHistoryIndex]?.name || enhancedPrompt || prompt || "3D Model") })}
-                                className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/20 transition-all duration-200"
+                                className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/15 transition"
                               >
-                                👁 Quick Preview
+                                Preview
                               </button>
                               <Link
                                 href={(currentModelUrl && currentModelUrl.startsWith('http'))
@@ -579,9 +564,9 @@ export default function Home() {
                                   : (generationHistory[selectedHistoryIndex]?.modelId
                                       ? `/simulation?modelId=${encodeURIComponent(generationHistory[selectedHistoryIndex].modelId)}&title=${encodeURIComponent(generationHistory[selectedHistoryIndex]?.name || enhancedPrompt || prompt || '3D Model')}`
                                       : '/simulation')}
-                                className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white font-semibold hover:opacity-90 transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl text-center"
+                                className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/15 transition text-center"
                               >
-                                🎮 AR Simulation
+                                AR Simulation
                               </Link>
                             </div>
                           ) : null}

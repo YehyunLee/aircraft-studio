@@ -102,12 +102,15 @@ export default function Hangar() {
 
   return (
     <div className="min-h-dvh p-6 text-white bg-[#05060a] relative">
-      {/* grid background */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1px,transparent_0)] [background-size:24px_24px]" />
+      {/* grid background (subtle line grid) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:24px_24px]"
+      />
       <div className="relative z-10 pb-24">
       <header className="max-w-xl mx-auto flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold">Hangar</h1>
-        <Link href="/" className="rounded-xl px-3 py-2 bg-white/6 text-sm">Back</Link>
+        <Link href="/" className="rounded-xl px-3 py-2 bg-white/10 border border-white/10 text-sm hover:bg-white/15 transition">Back</Link>
       </header>
 
       <main className="max-w-xl mx-auto space-y-4">
