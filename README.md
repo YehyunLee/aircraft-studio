@@ -34,7 +34,7 @@ Current focus
 
 Authentication (Auth0)
 ----------------------
-This app uses Auth0 for optional sign-in. Visit `/login` to either continue as a guest (no account) or sign in with Google. After signing in, you'll land back on the home page.
+This app uses Auth0 for optional sign-in. Visit `/login` to either continue as a guest (no account) or sign in with Google. After signing in, you'll land back on the home page; the header shows your name (if available) and a Logout link.
 
 Environment variables (see `.env.local.example`):
 
@@ -42,9 +42,15 @@ Environment variables (see `.env.local.example`):
 - `AUTH0_CLIENT_ID`
 - `AUTH0_CLIENT_SECRET`
 - `AUTH0_SECRET` (generate with `openssl rand -hex 32`)
-- `APP_BASE_URL` (e.g., `https://localhost:3000`)
+- `APP_BASE_URL` (e.g., `http://localhost:3000`)
 
-Ensure the Google connection is enabled in your Auth0 tenant and named `google-oauth2` (default). The bottom nav shows a Login/Profile tab depending on your authentication state.
+Ensure the Google connection is enabled in your Auth0 tenant and named `google-oauth2` (default). The bottom nav now includes a Leaderboard tab.
+
+Leaderboard
+-----------
+- Route: `/leaderboard`
+- Status: Initial UI placeholder using the same theme as the Home page.
+- Planned: Persist per-user simulation stats (score, hits, time, etc.) using MongoDB. User identity will come from Auth0 (display name used for the board). A simple API will aggregate and return the top runs.
 
 Notes
 -----

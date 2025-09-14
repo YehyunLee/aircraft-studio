@@ -6,7 +6,7 @@ export default function BottomNav() {
   const items = [
     { href: "/", label: "Craft", icon: CraftIcon },
     { href: "/aircraft", label: "Hangar", icon: HangarIcon },
-    { href: "/login", label: "Login", icon: AccountIcon },
+    { href: "/leaderboard", label: "Leaders", icon: LeaderboardIcon },
   ];
 
   return (
@@ -60,11 +60,10 @@ function HangarIcon({ className = "" }) {
   );
 }
 
-function AccountIcon({ className = "" }) {
+function LeaderboardIcon({ className = "" }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5z" />
-      <path d="M3 22a9 9 0 0 1 18 0" />
+      <path d="M4 21h4V10H4v11zM10 21h4V3h-4v18zM16 21h4v-6h-4v6z" />
     </svg>
   );
 }
