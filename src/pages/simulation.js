@@ -228,6 +228,8 @@ export default function Simulation() {
     }
 
     try {
+      // Ensure audio context is alive before wiring listener/sounds
+      try { await ensureAudioContextRunning(); } catch (_) {}
       const renderer = new THREE.WebGLRenderer({ 
         antialias: true, 
         alpha: true 
@@ -749,6 +751,16 @@ export default function Simulation() {
     } catch (_) {}
   };
 
+  // Ensure shared Web Audio context is running (resume if suspended) so sounds can play on subsequent runs
+  const ensureAudioContextRunning = async () => {
+    try {
+      const ctx = THREE.AudioContext && THREE.AudioContext.getContext ? THREE.AudioContext.getContext() : null;
+      if (ctx && typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+        await ctx.resume().catch(() => {});
+      }
+    } catch (_) {}
+  };
+
   // iOS visual viewport compensation for Variant/embedded zoom: inversely scale overlay container
   useEffect(() => {
     try {
@@ -846,6 +858,8 @@ export default function Simulation() {
   // Handle Enter AR button: on iOS outside of Launch viewer, use SDK to relaunch
   const handleEnterAR = async () => {
     try {
+      // Make sure AudioContext is resumed on user gesture before starting
+      await ensureAudioContextRunning();
       const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
       // If on iOS and WebXR is not yet supported (i.e., we're outside the Launch viewer), use the SDK redirect
       if (isIOS && !isARSupported && window.VLaunch && typeof window.VLaunch.getLaunchUrl === 'function') {
@@ -863,6 +877,8 @@ export default function Simulation() {
   // Spawn a shader-based 2D beam from the player's aircraft
   const fireShot = () => {
     try {
+      // Attempt to resume audio in case context was suspended
+      try { ensureAudioContextRunning(); } catch (_) {}
       const scene = sceneRef.current;
       const aircraft = aircraftRef.current;
       const renderer = rendererRef.current;
@@ -1607,6 +1623,12 @@ export default function Simulation() {
     setIsLoadingModel(false);
     setError('');
     try { setEnemiesRemaining(0); } catch (_) {}
+    // Clear audio refs so next session re-creates fresh instances and buffers
+    try {
+      propellerSoundRef.current = null;
+      shootingSoundRef.current = null;
+      explosionSoundRef.current = null;
+    } catch (_) {}
   };
 
   // On navigation away, tab hide, or pagehide (iOS), ensure audio is stopped
@@ -1849,11 +1871,11 @@ export default function Simulation() {
             <button
               id="shoot-btn"
               className="shoot-btn"
-              onPointerDown={() => { isFiringRef.current = true; fireShot(); }}
+              onPointerDown={() => { try { ensureAudioContextRunning(); } catch (_) {}; isFiringRef.current = true; fireShot(); }}
               onPointerUp={() => { isFiringRef.current = false; }}
               onPointerCancel={() => { isFiringRef.current = false; }}
               onPointerLeave={() => { isFiringRef.current = false; }}
-              onTouchStart={(e) => { e.preventDefault(); isFiringRef.current = true; fireShot(); }}
+              onTouchStart={(e) => { e.preventDefault(); try { ensureAudioContextRunning(); } catch (_) {}; isFiringRef.current = true; fireShot(); }}
               onTouchEnd={(e) => { e.preventDefault(); isFiringRef.current = false; }}
             >
               Fire
