@@ -31,7 +31,7 @@ Current prototype focuses on the home page, Hangar flow, and a responsive AR-sty
 - Auth0: Optional Google login enables authenticated run submissions; guest play remains supported.
 
 ## Technical highlights
-- Supporting both iOS and Android.
+- Supporting both iOS and Android via web browser without app install required
 - Mobile-first UX: touch-first controls, small UI footprint, quick iteration
 - Kinematic flight model: responsive motion without full aero sim
   - Smoothed velocity targets, clamped rates, joystick-driven yaw/pitch/roll
