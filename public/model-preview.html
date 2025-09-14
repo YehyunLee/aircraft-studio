@@ -141,7 +141,7 @@
           model = SkeletonUtils.clone(gltf.scene);
           group.add(model);
           fitCameraToObject(camera, model, 1.2);
-          setStatus('Model loaded — drag to rotate the model.');
+          setStatus('Drag to rotate the model');
         }, (xhr) => {
           if (xhr.total) setStatus('Loading: ' + Math.round(xhr.loaded / xhr.total * 100) + '%');
         }, (err) => {

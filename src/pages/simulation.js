@@ -1410,13 +1410,19 @@ export default function Simulation() {
   };
 
   return (
-  <div className="min-h-dvh bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white" style={{ background: (isARActive && overlayUsesBody) ? 'transparent' : undefined }}>
+  <div className="min-h-dvh text-white bg-[#05060a] relative" style={{ background: (isARActive && overlayUsesBody) ? 'transparent' : undefined }}>
+      {/* grid background (hidden when AR uses body overlay) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:24px_24px]"
+        style={{ display: (isARActive && overlayUsesBody) ? 'none' : undefined }}
+      />
       <div ref={containerRef} className="w-full h-dvh absolute top-0 left-0" />
       
       {!isARActive && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
-          <div className="glass rounded-2xl p-6 w-full max-w-md text-center">
-            <h1 className="text-2xl font-bold mb-4">AR Simulation</h1>
+          <div className="glass rounded-2xl p-6 w-full max-w-md text-center border border-white/10 shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+            <h1 className="text-2xl font-semibold mb-4">AR Simulation</h1>
             
             {!isARSupported ? (
               <div>
@@ -1479,7 +1485,7 @@ export default function Simulation() {
                     </div>
                     <button
                       onClick={handleEnterAR}
-                      className="w-full py-3 px-6 bg-cyan-500 hover:bg-cyan-600 rounded-xl font-semibold text-black transition-colors"
+                      className="w-full py-3 px-6 rounded-xl bg-white/10 text-white font-semibold border border-white/20 hover:bg-white/15 transition"
                     >
                       Enter AR
                     </button>
@@ -1506,7 +1512,7 @@ export default function Simulation() {
                       </div>
                       <button
                         onClick={handleEnterAR}
-                        className="w-full py-3 px-6 bg-cyan-500 hover:bg-cyan-600 rounded-xl font-semibold text-black transition-colors"
+                        className="w-full py-3 px-6 rounded-xl bg-white/10 text-white font-semibold border border-white/20 hover:bg-white/15 transition"
                       >
                         Enter AR
                       </button>
@@ -1531,8 +1537,8 @@ export default function Simulation() {
             )}
             
             {error && (
-              <div className="mt-4 p-3 bg-red-500/20 border border-red-500/40 rounded-xl">
-                <p className="text-red-300 text-sm">{error}</p>
+              <div className="mt-4 p-3 bg-red-500/15 border border-red-500/35 rounded-xl">
+                <p className="text-red-200 text-sm">{error}</p>
               </div>
             )}
           </div>
@@ -1549,19 +1555,14 @@ export default function Simulation() {
           <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
             <button
               onClick={exitARAndGoHome}
-              className="px-4 py-2 bg-red-500/80 backdrop-blur rounded-xl text-white font-medium"
+              className="px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white font-medium backdrop-blur hover:bg-white/15 transition"
             >
               Exit AR
             </button>
             <div
-              className={`px-4 py-2 backdrop-blur rounded-xl text-sm font-semibold shadow-md
-                ${enemiesRemaining === 0
-                  ? 'bg-green-500/80 text-black'
-                  : enemiesRemaining <= 3
-                    ? 'bg-yellow-400/90 text-black'
-                    : 'bg-red-500/80 text-white'}`}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold shadow-md bg-black/50 border border-white/15 backdrop-blur text-white/90`}
             >
-              Enemies left: {enemiesRemaining}
+              Enemies left: <span className={`${enemiesRemaining === 0 ? 'text-emerald-300' : enemiesRemaining <= 3 ? 'text-yellow-300' : 'text-red-300'}`}>{enemiesRemaining}</span>
             </div>
           </div>
         )}
@@ -1660,8 +1661,8 @@ export default function Simulation() {
         }
         .joystick-btn {
           position: absolute;
-          background: rgba(255, 255, 255, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.3);
+          background: rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.18);
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -1675,19 +1676,19 @@ export default function Simulation() {
           pointer-events: auto; /* re-enable on interactive controls */
         }
         .joystick-btn:active {
-          background: rgba(255, 255, 255, 0.4);
+          background: rgba(255, 255, 255, 0.22);
         }
         .shoot-btn {
           width: 70px;
           height: 70px;
           border-radius: 9999px;
-          background: rgba(59, 130, 246, 0.85);
+          background: rgba(255, 255, 255, 0.14);
           border: 1px solid rgba(255, 255, 255, 0.25);
           color: white;
           font-weight: 700;
           letter-spacing: 0.5px;
           text-transform: uppercase;
-          box-shadow: 0 4px 18px rgba(59, 130, 246, 0.45);
+          box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
           backdrop-filter: blur(6px);
           cursor: pointer;
           user-select: none;
@@ -1697,7 +1698,7 @@ export default function Simulation() {
         }
         .shoot-btn:active {
           transform: scale(0.98);
-          background: rgba(59, 130, 246, 1);
+          background: rgba(255, 255, 255, 0.22);
         }
         /* HUD indicator */
         .hud-indicator {

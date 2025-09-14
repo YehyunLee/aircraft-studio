@@ -447,18 +447,12 @@ export default function Home() {
                     Hangar
                   </Link>
                 </div>
-                {/* Minimal Features */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                  <Feature title="AI Design" subtitle="Text to concept" />
-                  <Feature title="Image" subtitle="One-click render" />
-                  <Feature title="3D & AR" subtitle="Preview and fly" />
-                </div>
               </div>
             </section>
 
             {/* Mobile CTA */}
             <section className="text-center">
-              <p className="text-sm text-white/60 mb-3">Open on your phone</p>
+              <p className="text-sm text-white/60 mb-3">For iOS, use <b>Safari</b></p>
               <div className="inline-block glass-card rounded-2xl p-5">
                 <div className="w-56 h-56 bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center rounded-xl">
                   <Image src="/qr_code.png" alt="QR Code" width={224} height={224} className="opacity-70" />
@@ -495,7 +489,7 @@ export default function Home() {
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="e.g., 'F22' or 'Futuristic stealth fighter with blue LED accents' or 'Classic WWII Spitfire in sunset colors'"
+                    placeholder="e.g., 'F22' or '6th gen' or 'Futuristic stealth fighter with blue LED accents' or 'Classic WWII Spitfire in sunset colors'"
                     className="w-full p-4 rounded-xl bg-white/5 border border-white/20 text-white placeholder-white/50 resize-none h-28 focus:outline-none focus:border-cyan-400 focus:bg-white/10 transition-all duration-200 text-sm leading-relaxed"
                   />
                 </div>
