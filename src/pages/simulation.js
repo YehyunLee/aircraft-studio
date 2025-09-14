@@ -684,6 +684,50 @@ export default function Simulation() {
     }
   };
 
+  // Stop all currently playing or looped audio and optionally suspend the Web Audio context (helps iOS)
+  const stopAllAudio = (suspendContext = false) => {
+    try {
+      // Stop engine/propeller hum
+      if (propellerSoundRef.current) {
+        try { propellerSoundRef.current.setLoop(false); } catch (_) {}
+        try { if (propellerSoundRef.current.isPlaying) propellerSoundRef.current.stop(); } catch (_) {}
+        try { propellerSoundRef.current.setBuffer(null); } catch (_) {}
+      }
+      // Stop player shooting sound
+      if (shootingSoundRef.current) {
+        try { if (shootingSoundRef.current.isPlaying) shootingSoundRef.current.stop(); } catch (_) {}
+        try { shootingSoundRef.current.setBuffer(null); } catch (_) {}
+      }
+      // Stop explosion sound
+      if (explosionSoundRef.current) {
+        try { if (explosionSoundRef.current.isPlaying) explosionSoundRef.current.stop(); } catch (_) {}
+        try { explosionSoundRef.current.setBuffer(null); } catch (_) {}
+      }
+      // Stop any enemy positional audio
+      try {
+        const enemies = enemiesRef.current || [];
+        for (const e of enemies) {
+          try { if (e && e.shootAudio && e.shootAudio.isPlaying) e.shootAudio.stop(); } catch (_) {}
+        }
+      } catch (_) {}
+      // Detach audio listener from camera to break audio graph
+      try {
+        if (audioListenerRef.current && cameraRef.current) {
+          try { cameraRef.current.remove(audioListenerRef.current); } catch (_) {}
+        }
+      } catch (_) {}
+      // Suspend audio context on iOS so nothing keeps playing in background
+      if (suspendContext) {
+        try {
+          const ctx = THREE.AudioContext && THREE.AudioContext.getContext ? THREE.AudioContext.getContext() : null;
+          if (ctx && typeof ctx.suspend === 'function' && ctx.state !== 'closed') {
+            ctx.suspend().catch(() => {});
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  };
+
   // iOS visual viewport compensation for Variant/embedded zoom: inversely scale overlay container
   useEffect(() => {
     try {
@@ -1139,6 +1183,8 @@ export default function Simulation() {
     } catch (_) {}
 
     // Show leaderboard overlay while still in AR; user will choose to close (and then we'll exit)
+    // Quiet the scene audio once wave is complete (especially for iOS)
+    try { stopAllAudio(false); } catch (_) {}
     setShowLeaderboard(true);
   };
 
@@ -1433,8 +1479,11 @@ export default function Simulation() {
 
   const exitAR = () => {
     if (sessionRef.current) {
-      sessionRef.current.end().catch(err => console.error("Failed to end session:", err));
+      // End session first
+      try { sessionRef.current.end(); } catch (err) { console.error("Failed to end session:", err); }
     }
+    // Proactively stop all sounds and suspend audio context on iOS
+    try { stopAllAudio(true); } catch (_) {}
     
     if (rendererRef.current) {
       rendererRef.current.setAnimationLoop(null);
@@ -1443,13 +1492,6 @@ export default function Simulation() {
       }
       rendererRef.current.dispose();
       rendererRef.current = null;
-    }
-
-    if (propellerSoundRef.current && propellerSoundRef.current.isPlaying) {
-      propellerSoundRef.current.stop();
-    }
-    if (shootingSoundRef.current && shootingSoundRef.current.isPlaying) {
-      shootingSoundRef.current.stop();
     }
 
     sessionRef.current = null;
@@ -1486,6 +1528,28 @@ export default function Simulation() {
     setError('');
     try { setEnemiesRemaining(0); } catch (_) {}
   };
+
+  // On navigation away, tab hide, or pagehide (iOS), ensure audio is stopped
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        try { stopAllAudio(true); } catch (_) {}
+      }
+    };
+    const onPageHide = () => {
+      try { stopAllAudio(true); } catch (_) {}
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onPageHide);
+    // Also stop on Next.js route changes
+    const handleRouteStart = () => { try { stopAllAudio(true); } catch (_) {} };
+    try { router.events?.on('routeChangeStart', handleRouteStart); } catch (_) {}
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onPageHide);
+      try { router.events?.off('routeChangeStart', handleRouteStart); } catch (_) {}
+    };
+  }, []);
 
   // Exit AR and return to home page (used by the Exit button)
   const exitARAndGoHome = () => {
