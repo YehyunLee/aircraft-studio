@@ -4,6 +4,7 @@ import Image from "next/image";
 import Head from "next/head";
 import Script from "next/script";
 import { saveModelBlob, getModelObjectURL } from "../lib/idbModels";
+import BottomNav from "@/components/BottomNav";
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
@@ -390,7 +391,10 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white font-sans p-4 sm:p-6 lg:p-8">
+    <div className="min-h-dvh text-white font-sans bg-[#05060a] relative">
+      {/* grid background */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1px,transparent_0)] [background-size:24px_24px]" />
+      <div className="relative z-10 p-4 sm:p-6 lg:p-8 pb-24">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </Head>
@@ -619,6 +623,8 @@ export default function Home() {
           <span>Groq</span>
         </div>
       </footer>
+      </div>
+      <BottomNav />
 
       <style jsx>{`
         .glass-card {

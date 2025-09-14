@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import BottomNav from "@/components/BottomNav";
 
 // Hangar now shows a flat list of previously generated aircraft (generationHistory)
 export default function Hangar() {
@@ -100,7 +101,10 @@ export default function Hangar() {
   }
 
   return (
-    <div className="min-h-dvh p-6 bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white">
+    <div className="min-h-dvh p-6 text-white bg-[#05060a] relative">
+      {/* grid background */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1px,transparent_0)] [background-size:24px_24px]" />
+      <div className="relative z-10 pb-24">
       <header className="max-w-xl mx-auto flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold">Hangar</h1>
         <Link href="/" className="rounded-xl px-3 py-2 bg-white/6 text-sm">Back</Link>
@@ -176,6 +180,8 @@ export default function Hangar() {
           </div>
         )}
       </main>
+      </div>
+      <BottomNav />
 
       <style jsx>{`
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
