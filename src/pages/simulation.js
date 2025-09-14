@@ -100,8 +100,20 @@ export default function Simulation() {
         try {
           const resolved = await getModelObjectURL(modelIdParam);
           if (resolved) {
-            const nameFromLink = (typeof titleParam === 'string' && titleParam.length > 0) ? titleParam : 'Selected Aircraft';
-            models.unshift({ id: `id-${modelIdParam}`, name: nameFromLink, modelPath: resolved, source: 'id', modelId: modelIdParam });
+            // Try to enrich with thumbnail/name from generationHistory
+            let thumbFromHistory = null;
+            let nameFromHistory = null;
+            try {
+              const genHist = JSON.parse(localStorage.getItem('generationHistory') || '[]');
+              const match = genHist.find((it) => it && it.modelId && String(it.modelId) === String(modelIdParam));
+              if (match) {
+                thumbFromHistory = match.imageUrl || null;
+                nameFromHistory = match.name || null;
+              }
+            } catch (_) {}
+
+            const nameFromLink = (typeof titleParam === 'string' && titleParam.length > 0) ? titleParam : (nameFromHistory || 'Selected Aircraft');
+            models.unshift({ id: `id-${modelIdParam}`, name: nameFromLink, modelPath: resolved, source: 'id', modelId: modelIdParam, thumb: thumbFromHistory });
             preselectedFromLink = resolved;
             urlCleanup.push(resolved);
           }
@@ -1325,6 +1337,12 @@ export default function Simulation() {
     try { setEnemiesRemaining(0); } catch (_) {}
   };
 
+  // Exit AR and return to home page (used by the Exit button)
+  const exitARAndGoHome = () => {
+    try { exitAR(); } catch (_) {}
+    try { router.push('/'); } catch (_) {}
+  };
+
   return (
     <div className="min-h-dvh bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white">
       <div ref={containerRef} className="w-full h-dvh absolute top-0 left-0" />
@@ -1368,7 +1386,14 @@ export default function Simulation() {
                           seen.add(key);
                           deduped.push(m);
                         }
-                        const enemies = deduped.length > 0 ? deduped : (selectedEntry ? [selectedEntry] : []);
+                        let enemies = deduped.length > 0 ? deduped : (selectedEntry ? [selectedEntry] : []);
+                        // If mirroring selected and no thumb, try to find an alt entry of same model with a thumb
+                        if (enemies.length === 1 && enemies[0] === selectedEntry && (!selectedEntry.thumb)) {
+                          const alt = models.find(m => (selectedId && m.modelId && String(m.modelId) === selectedId) || m.modelPath === sel);
+                          if (alt && alt.thumb) {
+                            enemies = [alt];
+                          }
+                        }
                         return enemies.slice(0, 6).map((m, idx) => (
                           <div key={m.id || idx} className="glass rounded-xl p-3 flex items-center gap-3">
                             <div className="w-14 h-14 rounded-lg overflow-hidden bg-white/10 border border-white/10 flex-shrink-0">
@@ -1457,7 +1482,7 @@ export default function Simulation() {
         {isARActive && (
           <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
             <button
-              onClick={exitAR}
+              onClick={exitARAndGoHome}
               className="px-4 py-2 bg-red-500/80 backdrop-blur rounded-xl text-white font-medium"
             >
               Exit AR
