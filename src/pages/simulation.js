@@ -1508,8 +1508,16 @@ export default function Simulation() {
       
       {!isARActive && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
-          <div className="glass rounded-2xl p-6 w-full max-w-md text-center border border-white/10 shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
-            <h1 className="text-2xl font-semibold mb-4">AR Simulation</h1>
+          <div className="glass rounded-2xl p-6 w-full max-w-md border border-white/10 shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-2xl font-semibold">AR Simulation</h1>
+              <button
+                onClick={() => router.push('/aircraft')}
+                className="px-3 py-2 rounded-xl bg-white/10 text-white/90 border border-white/15 hover:bg-white/15 transition text-sm"
+              >
+                Back
+              </button>
+            </div>
             
             {!isARSupported ? (
               <div>
