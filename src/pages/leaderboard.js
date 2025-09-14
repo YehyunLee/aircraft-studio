@@ -3,7 +3,7 @@ import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { auth0 } from "@/lib/auth0";
 
-export default function LeaderboardPage({ userName = null, entries = [] }) {
+export default function LeaderboardPage({ userName = null, entries = [], mode = 'top-users' }) {
   return (
     <div className="min-h-dvh text-white font-sans bg-[#05060a] relative">
       <div
@@ -39,6 +39,15 @@ export default function LeaderboardPage({ userName = null, entries = [] }) {
 
         <main className="max-w-3xl mx-auto">
           <section className="glass-card rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-xs text-white/60">
+                {mode === 'all' ? 'Showing all runs' : 'Showing best run per user'}
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <Link href={{ pathname: '/leaderboard', query: { mode: 'top-users' } }} className={`px-3 py-1 rounded-lg border ${mode !== 'all' ? 'bg-white/15 border-white/25 text-white' : 'bg-white/5 border-white/15 text-white/80 hover:text-white'}`}>Top by user</Link>
+                <Link href={{ pathname: '/leaderboard', query: { mode: 'all' } }} className={`px-3 py-1 rounded-lg border ${mode === 'all' ? 'bg-white/15 border-white/25 text-white' : 'bg-white/5 border-white/15 text-white/80 hover:text-white'}`}>All runs</Link>
+              </div>
+            </div>
             {entries.length === 0 ? (
               <div className="text-center py-10">
                 <p className="text-white/70">No runs yet. Be the first to top the charts!</p>
@@ -97,14 +106,33 @@ export async function getServerSideProps(context) {
     // Import server-only DB helper here to keep it out of the client bundle
     const { getDb } = await import("@/lib/mongodb");
 
+    const modeParam = (context.query?.mode || 'top-users').toString();
+    const mode = modeParam === 'all' ? 'all' : 'top-users';
+
     // Query MongoDB directly (avoids self-signed HTTPS issues in dev)
     const db = await getDb();
     const leaderboard = db.collection('leaderboard');
-    const docs = await leaderboard
-      .find({}, { projection: { _id: 0 } })
-      .sort({ score: -1, clearTime: 1 })
-      .limit(50)
-      .toArray();
+    let docs = [];
+
+    if (mode === 'all') {
+      docs = await leaderboard
+        .find({}, { projection: { _id: 0 } })
+        .sort({ score: -1, clearTime: 1, createdAt: 1 })
+        .limit(100)
+        .toArray();
+    } else {
+      // Best run per user: prefer Auth0 sub; fallback to user name
+      const pipeline = [
+        { $addFields: { userKey: { $ifNull: [ '$user.sub', '$user.name' ] } } },
+        { $sort: { score: -1, clearTime: 1, createdAt: 1 } },
+        { $group: { _id: '$userKey', doc: { $first: '$$ROOT' } } },
+        { $replaceRoot: { newRoot: '$doc' } },
+        { $project: { _id: 0 } },
+        { $limit: 100 },
+        { $sort: { score: -1, clearTime: 1, createdAt: 1 } },
+      ];
+      docs = await leaderboard.aggregate(pipeline).toArray();
+    }
 
     const entries = (docs || []).map((it, idx) => ({
       id: idx,
@@ -118,8 +146,8 @@ export async function getServerSideProps(context) {
       accuracy: typeof it?.accuracy === 'number' ? it.accuracy : null,
     }));
 
-    return { props: { userName, entries } };
+    return { props: { userName, entries, mode } };
   } catch (e) {
-    return { props: { userName: null, entries: [] } };
+    return { props: { userName: null, entries: [], mode: 'top-users' } };
   }
 }
