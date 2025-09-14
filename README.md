@@ -233,3 +233,18 @@ Roadmap improvements
 ```bash
 npx next dev --experimental-https
 ```
+
+### Platform & Infrastructure
+https://app.fireworks.ai/
+https://platform.stability.ai/
+https://cloud.mongodb.com/
+https://launchar.app/
+https://app.netlify.com/
+
+Windsulf
+Groq
+Auth0
+MongoDB
+
+Flux 1
+Spar 3D
