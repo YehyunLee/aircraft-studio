@@ -31,7 +31,7 @@ export default function LeaderboardPage({ userName = null, entries = [], mode = 
               {userName ? (
                 <span className="text-sm text-white/70">{userName}</span>
               ) : (
-                <Link href="/login" className="text-sm text-white/80 hover:text-white transition-colors">Login</Link>
+                <Link href="/login" target="_top" className="text-sm text-white/80 hover:text-white transition-colors">Login</Link>
               )}
             </nav>
           </div>
