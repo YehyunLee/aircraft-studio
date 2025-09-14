@@ -332,10 +332,12 @@ export default function Simulation() {
         setOverlayUsesBody(chosenRoot === document.body);
       } catch (_) {}
 
-      // Handle session end
-      session.addEventListener('end', () => {
-        exitAR();
-      });
+      // Handle session end (avoid calling end() again inside handler)
+      const onSessionEnd = () => {
+        try { exitAR(true); } catch (_) {}
+        try { session.removeEventListener('end', onSessionEnd); } catch (_) {}
+      };
+      session.addEventListener('end', onSessionEnd);
 
       const refSpace = await session.requestReferenceSpace('local-floor');
 
@@ -858,6 +860,14 @@ export default function Simulation() {
   // Handle Enter AR button: on iOS outside of Launch viewer, use SDK to relaunch
   const handleEnterAR = async () => {
     try {
+      setError('');
+      // Ensure any previous XR session is properly closed before starting a new one
+      try {
+        const current = (rendererRef.current && rendererRef.current.xr && rendererRef.current.xr.getSession) ? rendererRef.current.xr.getSession() : null;
+        if (current && !current.ended) {
+          await current.end().catch(() => {});
+        }
+      } catch (_) {}
       // Make sure AudioContext is resumed on user gesture before starting
       await ensureAudioContextRunning();
       const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -868,6 +878,10 @@ export default function Simulation() {
         const launchUrl = window.VLaunch.getLaunchUrl(url.toString());
         window.location.href = launchUrl;
         return;
+      }
+      // Re-check support at click time (context can change after Launch viewer)
+      if (navigator.xr && navigator.xr.isSessionSupported) {
+        try { setIsARSupported(await navigator.xr.isSessionSupported('immersive-ar')); } catch (_) {}
       }
     } catch {}
     // Otherwise, try starting WebXR directly
@@ -1573,10 +1587,10 @@ export default function Simulation() {
     }
   };
 
-  const exitAR = () => {
-    if (sessionRef.current) {
-      // End session first
-      try { sessionRef.current.end(); } catch (err) { console.error("Failed to end session:", err); }
+  const exitAR = (skipEnd = false) => {
+    if (sessionRef.current && !skipEnd) {
+      // End session first (if not already ended)
+      try { if (!sessionRef.current.ended) sessionRef.current.end(); } catch (err) { console.error("Failed to end session:", err); }
     }
     // Proactively stop all sounds and suspend audio context on iOS
     try { stopAllAudio(true); } catch (_) {}
@@ -1590,7 +1604,9 @@ export default function Simulation() {
       rendererRef.current = null;
     }
 
-    sessionRef.current = null;
+  sessionRef.current = null;
+  sceneRef.current = null;
+  cameraRef.current = null;
     aircraftRef.current = null;
     // Cleanup enemies
     try {
