@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Head from 'next/head';
 import { useRouter } from 'next/router';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -682,6 +683,56 @@ export default function Simulation() {
       setError('Failed to start AR session: ' + err.message);
     }
   };
+
+  // iOS visual viewport compensation for Variant/embedded zoom: inversely scale overlay container
+  useEffect(() => {
+    try {
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const vv = window.visualViewport;
+      const getEl = () => document.getElementById('ar-ui-container');
+      const apply = () => {
+        const el = getEl();
+        if (!el) return;
+        if (isIOS && vv && isARActive) {
+          const s = vv.scale || 1;
+          const inv = 1 / s;
+          el.style.transformOrigin = 'top left';
+          el.style.transform = `scale(${inv})`;
+          el.style.left = vv.offsetLeft + 'px';
+          el.style.top = vv.offsetTop + 'px';
+          el.style.right = 'auto';
+          el.style.bottom = 'auto';
+          el.style.width = vv.width + 'px';
+          el.style.height = vv.height + 'px';
+        } else {
+          el.style.transform = '';
+          el.style.transformOrigin = '';
+          el.style.left = '';
+          el.style.top = '';
+          el.style.right = '';
+          el.style.bottom = '';
+          el.style.width = '';
+          el.style.height = '';
+        }
+      };
+      apply();
+      if (vv) {
+        vv.addEventListener('resize', apply);
+        vv.addEventListener('scroll', apply);
+      }
+      window.addEventListener('orientationchange', apply);
+      return () => {
+        try {
+          if (vv) {
+            vv.removeEventListener('resize', apply);
+            vv.removeEventListener('scroll', apply);
+          }
+          window.removeEventListener('orientationchange', apply);
+        } catch (_) {}
+      };
+    } catch (_) {}
+  }, [isARActive]);
 
   // Handle Enter AR button: on iOS outside of Launch viewer, use SDK to relaunch
   const handleEnterAR = async () => {
@@ -1444,6 +1495,9 @@ export default function Simulation() {
 
   return (
   <div className="min-h-dvh text-white bg-[#05060a] relative" style={{ background: (isARActive && overlayUsesBody) ? 'transparent' : undefined }}>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+      </Head>
       {/* grid background (hidden when AR uses body overlay) */}
       <div
         aria-hidden
