@@ -14,7 +14,7 @@ export default function Simulation() {
 
   const containerRef = useRef();
   const router = useRouter();
-  const { src: srcParam, title: titleParam, modelId: modelIdParam } = router.query || {};
+  const { src: srcParam, title: titleParam, modelId: modelIdParam, instantWebxr } = router.query || {};
   const [isARSupported, setIsARSupported] = useState(false);
   const [isARActive, setIsARActive] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
@@ -84,6 +84,17 @@ export default function Simulation() {
   const tmpVec4 = useRef(new THREE.Vector3());
 
   useEffect(() => {
+    // If Launch SDK is present, handle iOS flow: redirect to launch viewer for WebXR
+    const onVLaunchInit = (event) => {
+      try {
+        if (event?.detail?.launchRequired && event?.detail?.launchUrl) {
+          // Re-enter this page within the Launch viewer to enable WebXR on iOS
+          window.location.href = event.detail.launchUrl;
+        }
+      } catch {}
+    };
+    window.addEventListener('vlaunch-initialized', onVLaunchInit);
+
     // Check WebXR support
     if (navigator.xr) {
       navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
@@ -179,10 +190,18 @@ export default function Simulation() {
       } else if (models.length > 0) {
         setSelectedModel(models[0].modelPath);
       }
+      // If coming back from Launch viewer with instantWebxr flag, auto-start AR
+      if (typeof instantWebxr === 'string' && instantWebxr.toLowerCase() === 'true') {
+        // Defer a tick to allow UI and renderer to mount
+        setTimeout(() => {
+          initAR();
+        }, 50);
+      }
     });
 
     // Cleanup created object URLs on unmount
     return () => {
+      window.removeEventListener('vlaunch-initialized', onVLaunchInit);
       urlCleanup.forEach((u) => URL.revokeObjectURL(u));
     };
   }, []);
@@ -631,6 +650,23 @@ export default function Simulation() {
       console.error('AR initialization failed:', err);
       setError('Failed to start AR session: ' + err.message);
     }
+  };
+
+  // Handle Enter AR button: on iOS outside of Launch viewer, use SDK to relaunch
+  const handleEnterAR = async () => {
+    try {
+      const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+      // If on iOS and WebXR is not yet supported (i.e., we're outside the Launch viewer), use the SDK redirect
+      if (isIOS && !isARSupported && window.VLaunch && typeof window.VLaunch.getLaunchUrl === 'function') {
+        const url = new URL(window.location.href);
+        url.searchParams.set('instantWebxr', 'true');
+        const launchUrl = window.VLaunch.getLaunchUrl(url.toString());
+        window.location.href = launchUrl;
+        return;
+      }
+    } catch {}
+    // Otherwise, try starting WebXR directly
+    initAR();
   };
 
   // Spawn a shader-based 2D beam from the player's aircraft
@@ -1412,7 +1448,7 @@ export default function Simulation() {
                       })()}
                     </div>
                     <button
-                      onClick={initAR}
+                      onClick={handleEnterAR}
                       className="w-full py-3 px-6 bg-cyan-500 hover:bg-cyan-600 rounded-xl font-semibold text-black transition-colors"
                     >
                       Enter AR
@@ -1439,7 +1475,7 @@ export default function Simulation() {
                         </select>
                       </div>
                       <button
-                        onClick={initAR}
+                        onClick={handleEnterAR}
                         className="w-full py-3 px-6 bg-cyan-500 hover:bg-cyan-600 rounded-xl font-semibold text-black transition-colors"
                       >
                         Enter AR
