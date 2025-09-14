@@ -1110,7 +1110,7 @@ export default function Simulation() {
           const aircraft = gltf.scene;
           
           // Position aircraft close to player spawn
-          aircraft.scale.setScalar(0.2); // Adjusted scale
+          aircraft.scale.setScalar(0.4); // Adjusted scale (2x bigger)
           aircraft.position.set(0, -0.5, -2); // 2 meters in front, slightly below eye level
           
           // Attach positional audio for shooting
@@ -1204,10 +1204,10 @@ export default function Simulation() {
                   let enemyObj;
                   if (gltf && gltf.scene) {
                     enemyObj = gltf.scene.clone(true);
-                    enemyObj.scale.setScalar(0.18);
+                    enemyObj.scale.setScalar(0.36); // 2x bigger
                   } else {
                     // Placeholder visible sphere so we can debug spawn positions even if glTF fails
-                    const placeholderGeo = new THREE.SphereGeometry(0.18, 12, 8);
+                    const placeholderGeo = new THREE.SphereGeometry(0.36, 12, 8); // 2x bigger
                     const placeholderMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
                     enemyObj = new THREE.Mesh(placeholderGeo, placeholderMat);
                     console.warn('Using placeholder for enemy at URL:', url);
