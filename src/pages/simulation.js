@@ -243,7 +243,8 @@ export default function Simulation() {
       audioLoader.load('/jet_engine_9s_sound_effect.mp3', (buffer) => {
         propellerSound.setBuffer(buffer);
         propellerSound.setLoop(true);
-        propellerSound.setVolume(0.5);
+        // Slightly louder propeller/engine hum
+        propellerSound.setVolume(0.8);
         propellerSound.play();
       });
       propellerSoundRef.current = propellerSound;
@@ -262,7 +263,8 @@ export default function Simulation() {
       audioLoader.load('/explosion.mp3', (buffer) => {
         explosionSound.setBuffer(buffer);
         explosionSound.setLoop(false);
-        explosionSound.setVolume(1.0);
+        // Increase explosion volume a bit
+        explosionSound.setVolume(3.0);
       });
       explosionSoundRef.current = explosionSound;
 
