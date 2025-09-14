@@ -100,8 +100,20 @@ export default function Simulation() {
         try {
           const resolved = await getModelObjectURL(modelIdParam);
           if (resolved) {
-            const nameFromLink = (typeof titleParam === 'string' && titleParam.length > 0) ? titleParam : 'Selected Aircraft';
-            models.unshift({ id: `id-${modelIdParam}`, name: nameFromLink, modelPath: resolved, source: 'id' });
+            // Try to enrich with thumbnail/name from generationHistory
+            let thumbFromHistory = null;
+            let nameFromHistory = null;
+            try {
+              const genHist = JSON.parse(localStorage.getItem('generationHistory') || '[]');
+              const match = genHist.find((it) => it && it.modelId && String(it.modelId) === String(modelIdParam));
+              if (match) {
+                thumbFromHistory = match.imageUrl || null;
+                nameFromHistory = match.name || null;
+              }
+            } catch (_) {}
+
+            const nameFromLink = (typeof titleParam === 'string' && titleParam.length > 0) ? titleParam : (nameFromHistory || 'Selected Aircraft');
+            models.unshift({ id: `id-${modelIdParam}`, name: nameFromLink, modelPath: resolved, source: 'id', modelId: modelIdParam, thumb: thumbFromHistory });
             preselectedFromLink = resolved;
             urlCleanup.push(resolved);
           }
@@ -120,7 +132,8 @@ export default function Simulation() {
         id: jet.id,
         name: jet.name || 'Untitled',
         modelPath: `/models/aircraft-${jet.id}.glb`,
-        source: 'hangar'
+        source: 'hangar',
+        thumb: jet.thumbnail || jet.imageUrl || null,
       });
     });
     
@@ -139,7 +152,9 @@ export default function Simulation() {
               id: item.slugId || `home-${index}`,
               name: item.name || item.enhancedPrompt || item.originalPrompt || (item.prompt ? `Generated: ${item.prompt.slice(0, 30)}...` : `Generated Model ${index + 1}`),
               modelPath: url,
-              source: 'home'
+              source: 'home',
+              thumb: item.imageUrl || null,
+              modelId: item.modelId,
             });
             return;
           }
@@ -150,7 +165,9 @@ export default function Simulation() {
           id: item.slugId || `home-${index}`,
           name: item.name || item.enhancedPrompt || item.originalPrompt || (item.prompt ? `Generated: ${item.prompt.slice(0, 30)}...` : `Generated Model ${index + 1}`),
           modelPath: item.modelUrl,
-          source: 'home'
+          source: 'home',
+          thumb: item.imageUrl || null,
+          modelId: item.modelId || undefined,
         });
       }
     });
@@ -980,6 +997,7 @@ export default function Simulation() {
   const closeLeaderboardAndExit = () => {
     try { setShowLeaderboard(false); } catch (_) {}
     try { exitAR(); } catch (_) {}
+    try { router.push('/aircraft'); } catch (_) {}
   };
 
   const placeAircraft = async () => {
@@ -1036,13 +1054,29 @@ export default function Simulation() {
                 }
                 let spawnList = [];
 
-                if (models.length <= 1) {
-                  // Duplicate the selected model 4 times
-                  const count = Math.max(3, Math.min(6, models.length ? 4 : 4));
-                  for (let i = 0; i < count; ++i) spawnList.push({ modelPath: selectedModel });
+                // Build opponents list by excluding selected by modelPath/modelId
+                const selectedEntry = models.find(m => m.modelPath === selectedModel);
+                const selectedId = selectedEntry && selectedEntry.modelId ? String(selectedEntry.modelId) : undefined;
+                const filtered = models.filter(m => {
+                  if (m.modelPath === selectedModel) return false;
+                  if (selectedId && m.modelId && String(m.modelId) === selectedId) return false;
+                  return true;
+                });
+                // Dedupe by modelId/url
+                const seen = new Set();
+                const deduped = [];
+                for (const m of filtered) {
+                  const key = m.modelId ? `id:${m.modelId}` : `url:${m.modelPath}`;
+                  if (seen.has(key)) continue;
+                  seen.add(key);
+                  deduped.push(m);
+                }
+                if (deduped.length === 0) {
+                  // No valid opponents found → fallback to duplicating the selected model 4 times
+                  const count = 4;
+                  spawnList = Array.from({ length: count }, () => ({ modelPath: selectedModel }));
                 } else {
-                  // Spawn all others except selectedModel
-                  spawnList = models.filter(m => m.modelPath !== selectedModel).map(m => ({ modelPath: m.modelPath }));
+                  spawnList = deduped.map(m => ({ modelPath: m.modelPath }));
                 }
 
                 // Load and spawn each model
@@ -1303,6 +1337,12 @@ export default function Simulation() {
     try { setEnemiesRemaining(0); } catch (_) {}
   };
 
+  // Exit AR and return to home page (used by the Exit button)
+  const exitARAndGoHome = () => {
+    try { exitAR(); } catch (_) {}
+    try { router.push('/aircraft'); } catch (_) {}
+  };
+
   return (
     <div className="min-h-dvh bg-gradient-to-br from-[#050816] via-[#071032] to-[#07101a] text-white">
       <div ref={containerRef} className="w-full h-dvh absolute top-0 left-0" />
@@ -1321,11 +1361,55 @@ export default function Simulation() {
               <div className="space-y-4">
                 {selectedModel ? (
                   <>
-                    <div className="text-left">
-                      <div className="text-sm text-white/70 mb-1">Selected Aircraft:</div>
-                      <div className="text-base font-semibold">
-                        {availableModels.find(m => m.modelPath === selectedModel)?.name || 'Selected Aircraft'}
-                      </div>
+                    {/* Opponents Preview */}
+                    <div className="text-left mb-2">
+                      <div className="text-sm text-white/70">Opponents</div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mb-2">
+                      {(() => {
+                        const sel = selectedModel;
+                        const models = availableModels || [];
+                        const selectedEntry = models.find(m => m.modelPath === sel) || models[0];
+                        const selectedId = selectedEntry && selectedEntry.modelId ? String(selectedEntry.modelId) : undefined;
+                        // Exclude selected by modelPath or matching modelId (if present)
+                        const filtered = (models || []).filter(m => {
+                          if (m.modelPath === sel) return false;
+                          if (selectedId && m.modelId && String(m.modelId) === selectedId) return false;
+                          return true;
+                        });
+                        // Dedupe by modelId or modelPath to avoid duplicates
+                        const seen = new Set();
+                        const deduped = [];
+                        for (const m of filtered) {
+                          const key = m.modelId ? `id:${m.modelId}` : `url:${m.modelPath}`;
+                          if (seen.has(key)) continue;
+                          seen.add(key);
+                          deduped.push(m);
+                        }
+                        let enemies = deduped.length > 0 ? deduped : (selectedEntry ? [selectedEntry] : []);
+                        // If mirroring selected and no thumb, try to find an alt entry of same model with a thumb
+                        if (enemies.length === 1 && enemies[0] === selectedEntry && (!selectedEntry.thumb)) {
+                          const alt = models.find(m => (selectedId && m.modelId && String(m.modelId) === selectedId) || m.modelPath === sel);
+                          if (alt && alt.thumb) {
+                            enemies = [alt];
+                          }
+                        }
+                        return enemies.slice(0, 6).map((m, idx) => (
+                          <div key={m.id || idx} className="glass rounded-xl p-3 flex items-center gap-3">
+                            <div className="w-14 h-14 rounded-lg overflow-hidden bg-white/10 border border-white/10 flex-shrink-0">
+                              {m.thumb ? (
+                                <img src={m.thumb} alt={m.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-white/40 text-xs">No image</div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{m.name}</div>
+                              <div className="text-[11px] text-white/50 truncate">{m.source === 'home' ? 'Generated' : (m.source === 'hangar' ? 'Hangar' : 'Link')}</div>
+                            </div>
+                          </div>
+                        ));
+                      })()}
                     </div>
                     <button
                       onClick={initAR}
@@ -1398,7 +1482,7 @@ export default function Simulation() {
         {isARActive && (
           <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
             <button
-              onClick={exitAR}
+              onClick={exitARAndGoHome}
               className="px-4 py-2 bg-red-500/80 backdrop-blur rounded-xl text-white font-medium"
             >
               Exit AR

@@ -31,8 +31,9 @@
       import { OrbitControls } from 'https://cdn.skypack.dev/three@0.128/examples/jsm/controls/OrbitControls.js';
       import { SkeletonUtils } from 'https://cdn.skypack.dev/three@0.128/examples/jsm/utils/SkeletonUtils.js';
 
-      const params = new URLSearchParams(window.location.search);
-      const modelUrl = params.get('modelUrl');
+  const params = new URLSearchParams(window.location.search);
+  const modelUrlParam = params.get('modelUrl');
+  const modelIdParam = params.get('modelId');
 
       const container = document.getElementById('container');
       const statusEl = document.getElementById('status');
@@ -82,9 +83,59 @@
 
       function setStatus(s) { statusEl.textContent = s; }
 
-      if (!modelUrl) {
-        setStatus('No modelUrl provided');
-      } else {
+      // IndexedDB helpers (duplicated minimal logic to avoid extra imports in static HTML)
+      const DB_NAME = 'aircraft-studio';
+      const STORE_NAME = 'models';
+      const DB_VERSION = 1;
+      function openDB() {
+        return new Promise((resolve, reject) => {
+          if (!('indexedDB' in window)) return reject(new Error('IndexedDB not available'));
+          const req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error || new Error('Failed to open IndexedDB'));
+        });
+      }
+      function getModelBlob(db, modelId) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, 'readonly');
+          const req = tx.objectStore(STORE_NAME).get(modelId);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error || new Error('IDB get error'));
+        });
+      }
+
+      let objectUrlToRevoke = null;
+
+      async function resolveModelUrl() {
+        if (modelUrlParam) return modelUrlParam;
+        if (modelIdParam) {
+          try {
+            setStatus('Resolving model from storage...');
+            const db = await openDB();
+            const blob = await getModelBlob(db, modelIdParam);
+            if (!blob) throw new Error('Model not found in storage');
+            const url = URL.createObjectURL(blob);
+            objectUrlToRevoke = url;
+            return url;
+          } catch (e) {
+            console.error('Failed to resolve modelId', e);
+            setStatus('Error: ' + (e && e.message ? e.message : 'Could not load stored model'));
+            return null;
+          }
+        }
+        return null;
+      }
+
+      (async () => {
+        const modelUrl = await resolveModelUrl();
+        if (!modelUrl) {
+          setStatus('No model provided');
+          return;
+        }
         setStatus('Loading model...');
         loader.load(modelUrl, (gltf) => {
           model = SkeletonUtils.clone(gltf.scene);
@@ -97,7 +148,7 @@
           console.error(err);
           setStatus('Error loading model');
         });
-      }
+      })();
 
       // OrbitControls for zoom & pan; we'll rotate the model via pointer drag for a predictable orientation message
       const controls = new OrbitControls(camera, renderer.domElement);
@@ -138,6 +189,10 @@
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      window.addEventListener('unload', () => {
+        try { if (objectUrlToRevoke) URL.revokeObjectURL(objectUrlToRevoke); } catch (e) {}
       });
 
       // Controls

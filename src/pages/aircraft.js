@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { getModelObjectURL } from "../lib/idbModels";
 
 // Hangar now shows a flat list of previously generated aircraft (generationHistory)
 export default function Hangar() {
@@ -64,14 +63,14 @@ export default function Hangar() {
     }
   }
 
-  async function getPreviewHref(item) {
-    // Prefer explicit URL
-    if (item.modelUrl) return `/preview?src=${encodeURIComponent(item.modelUrl)}&title=${encodeURIComponent(item.name || item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
+  function getPreviewHref(item) {
+    // Prefer persistent http(s) URLs; otherwise forward modelId to preview so it can resolve from IndexedDB
+    const title = encodeURIComponent(item.name || item.enhancedPrompt || item.originalPrompt || "3D Model");
+    if (item.modelUrl && typeof item.modelUrl === 'string' && item.modelUrl.startsWith('http')) {
+      return `/preview?src=${encodeURIComponent(item.modelUrl)}&title=${title}`;
+    }
     if (item.modelId) {
-      try {
-        const url = await getModelObjectURL(item.modelId);
-        if (url) return `/preview?src=${encodeURIComponent(url)}&title=${encodeURIComponent(item.name || item.enhancedPrompt || item.originalPrompt || "3D Model")}`;
-      } catch {}
+      return `/preview?modelId=${encodeURIComponent(item.modelId)}&title=${title}`;
     }
     return "#";
   }
@@ -88,9 +87,9 @@ export default function Hangar() {
     return "/simulation";
   }
 
-  async function onPreviewClick(e, item) {
+  function onPreviewClick(e, item) {
     e.stopPropagation();
-    const href = await getPreviewHref(item);
+    const href = getPreviewHref(item);
     if (href && href !== '#') router.push(href);
   }
 
@@ -142,7 +141,7 @@ export default function Hangar() {
                        </div>
                      </div>
  
-                     <div className="text-sm truncate">{item.name || item.enhancedPrompt || item.originalPrompt || item.prompt}</div>
+                    <div className="text-base font-medium truncate">{item.name || item.enhancedPrompt || item.originalPrompt || item.prompt}</div>
                      <div className="text-[11px] text-white/60 mt-2">{item.timestamp ? new Date(item.timestamp).toLocaleString() : (item.slugId || item.id)}</div>
                    </div>
  
@@ -154,7 +153,12 @@ export default function Hangar() {
                           <span className="px-3 py-2 rounded-xl bg-white/6 text-sm">No 3D</span>
                         )}
                        </div>
-                      <button onClick={(e) => onSimulationClick(e, item)} className="text-xs text-white/60 underline-offset-2 hover:underline">Open in Simulation</button>
+                      <button
+                        onClick={(e) => onSimulationClick(e, item)}
+                        className="px-3 py-2 rounded-xl bg-violet-400 text-black font-semibold hover:bg-violet-500 transition-colors"
+                      >
+                        Simulation
+                      </button>
 
                     <div className="mt-2">
                       <button
