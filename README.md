@@ -185,3 +185,10 @@ Roadmap improvements
 - Better collisions: simple convex hulls or per-part hitboxes.
 - Networked AR: shared anchors for multiplayer dogfights.
 - Deeper analytics: flight envelopes, trim curves, and auto-tuning suggestions from telemetry.
+
+
+### Command to run locally
+
+```bash
+npx next dev --experimental-https
+```
