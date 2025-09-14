@@ -115,11 +115,11 @@ export default function Hangar() {
 
       <main className="max-w-xl mx-auto space-y-4">
         {history.length === 0 ? (
-          <div className="glass rounded-2xl p-6 text-center">
+          <div className="panel rounded-2xl p-6 text-center">
             <p className="mb-2">No generated aircraft yet</p>
             <p className="text-xs text-white/70">Generate an aircraft on the home page to add it to your hangar.</p>
             <div className="mt-4">
-              <Link href="/" className="px-4 py-2 rounded-xl bg-cyan-500/20 text-cyan-200 border border-cyan-400/40">Open Generator</Link>
+              <Link href="/" className="px-4 py-2 rounded-xl bg-white/10 text-white/90 border border-white/15 hover:bg-white/15 transition">Open Generator</Link>
             </div>
           </div>
         ) : (
@@ -127,8 +127,8 @@ export default function Hangar() {
             {history.map((item, index) => (
               <div
                 key={item.id || index}
-                className={`p-4 rounded-xl bg-white/5 border transition-all duration-200 cursor-pointer hover:bg-white/10 ${
-                  selectedIndex === index ? "border-cyan-400 bg-cyan-400/5" : "border-white/10"
+                className={`panel p-4 rounded-xl transition-all duration-200 cursor-pointer hover:bg-white/10 ${
+                  selectedIndex === index ? "border-white/30 bg-white/10" : "border-white/10"
                 }`}
                 onClick={() => selectFromHistory(index)}
               >
@@ -141,9 +141,9 @@ export default function Hangar() {
                      <div className="flex items-center gap-2 mb-2">
                        <p className="text-sm text-white/60">#{index + 1}</p>
                        <div className="flex gap-2">
-                         <span className="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded-full font-medium">Image</span>
+                         <span className="text-xs bg-white/10 text-white/70 px-2 py-1 rounded-full font-medium">Image</span>
                          {(item.modelUrl || item.modelId) && (
-                           <span className="text-xs bg-violet-500/20 text-violet-300 px-2 py-1 rounded-full font-medium">3D</span>
+                           <span className="text-xs bg-white/10 text-white/70 px-2 py-1 rounded-full font-medium">3D</span>
                          )}
                        </div>
                      </div>
@@ -155,14 +155,14 @@ export default function Hangar() {
                    <div className="flex flex-col items-end gap-2">
                       <div className="flex gap-2">
                         {(item.modelUrl || item.modelId) ? (
-                          <button onClick={(e) => onPreviewClick(e, item)} className="px-3 py-2 rounded-xl bg-cyan-400 text-black font-semibold">Preview</button>
+                          <button onClick={(e) => onPreviewClick(e, item)} className="px-3 py-2 rounded-xl bg-white/10 text-white font-medium hover:bg-white/15 transition">Preview</button>
                         ) : (
-                          <span className="px-3 py-2 rounded-xl bg-white/6 text-sm">No 3D</span>
+                          <span className="px-3 py-2 rounded-xl bg-white/10 text-white/70 text-sm">No 3D</span>
                         )}
                        </div>
                       <button
                         onClick={(e) => onSimulationClick(e, item)}
-                        className="px-3 py-2 rounded-xl bg-violet-400 text-black font-semibold hover:bg-violet-500 transition-colors"
+                        className="px-3 py-2 rounded-xl bg-white/10 text-white font-medium hover:bg-white/15 transition"
                       >
                         Simulation
                       </button>
@@ -188,6 +188,12 @@ export default function Hangar() {
 
       <style jsx>{`
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .panel {
+          background: rgba(255, 255, 255, 0.04);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+        }
       `}</style>
     </div>
   );

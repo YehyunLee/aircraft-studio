@@ -495,7 +495,7 @@ export default function Home() {
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="e.g., 'Futuristic stealth fighter with blue LED accents' or 'Classic WWII Spitfire in sunset colors'"
+                    placeholder="e.g., 'F22' or 'Futuristic stealth fighter with blue LED accents' or 'Classic WWII Spitfire in sunset colors'"
                     className="w-full p-4 rounded-xl bg-white/5 border border-white/20 text-white placeholder-white/50 resize-none h-28 focus:outline-none focus:border-cyan-400 focus:bg-white/10 transition-all duration-200 text-sm leading-relaxed"
                   />
                 </div>
